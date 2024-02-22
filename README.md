@@ -6,7 +6,8 @@ This is a web-based robot management and data visualization tool.
 ```bash
 $ ssh administrator@hsrb.local
 $ git clone https://github.com/trcp/erasers-app.git
-$ ./erasers-app/erasers-gui/build.sh
+$ cd ~/erasers-app/erasers-gui
+$ ./build.sh
 $ cp erasers-app/erasers-gui/erasers.gui.service /etc/systemd/system
 $ sudo systemctl enable erasers.gui.service
 ```
