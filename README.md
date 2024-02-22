@@ -6,13 +6,29 @@ This is a web-based robot management and data visualization tool.
 ```bash
 $ ssh administrator@hsrb.local
 $ git clone https://github.com/trcp/erasers-app.git
-$ ./erasers-app/erasers-gui/build.sh
-$ cp erasers-app/erasers-gui/erasers.gui.service /etc/systemd/system
+$ cd ~/erasers-app/erasers-gui && ./build.sh
+$ sudo cp ~/erasers-app/erasers-gui/erasers.gui.service /etc/systemd/system
 $ sudo systemctl enable erasers.gui.service
 ```
+Automatically launch chromium gui when the HSR is powerd on. 
+1. Search for the Startup Application.
+![IMG20230626213206](https://github.com/ry0hei-kobayashi/erasers-app-v2/assets/110576744/a470643d-6770-41b9-b0e2-43b2f2d1d745)
+
+2. Add config for erasers-gui following below.
+![IMG20230626213223](https://github.com/ry0hei-kobayashi/erasers-app-v2/assets/110576744/876b2456-0e94-43ef-bc42-d0a3cfd8a9a6)
+
+Fill the below command in "Command(M)".  
+```bash
+/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-translate --disable-translate-new-ux -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
+```
+3. Remove the Check mark to prevent Toyota UI from starting automatically.
+![IMG20230626213217](https://github.com/ry0hei-kobayashi/erasers-app-v2/assets/110576744/873dadde-3b1f-4fa5-97e6-1ef08e0fd4f0)
+
+
 
 ### Client PC
 ```bash
+$ pip install pyinstaller
 $ git clone https://github.com/trcp/erasers-app.git
 $ cd erasers-app/erasers-server/ && ./build.sh
 ```
@@ -30,3 +46,4 @@ Show robot topic data.
 Publish data from browser.
 - /mapcreator  
 create map location data.
+  
