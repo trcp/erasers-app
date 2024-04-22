@@ -95,12 +95,8 @@ export function ImageModal({ imageTopicName, hostName }) {
                 aria-describedby="modal-modal-description"
             >
                 <Box sx={{ ...style, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography id="modal-modal-title" variant="h3">
-                        Emergency Button Enable
-                    </Typography>
-                    <hr />
                     <Box sx={{ position: 'relative', width: '90%', height: '90%', textAlign: 'center' }}>
-                        <img src={url} alt="dev logo" style={{ display: 'inline-block', verticalAlign: 'middle' }} />
+                        <img src={url} alt="dev logo" style={{ display: 'inline-block', verticalAlign: 'middle', height: '90%'}} />
                     </Box>
                 </Box>
             </Modal>
