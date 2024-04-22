@@ -37,6 +37,7 @@ class NodeData:
         rm_uri = "http://{}:11311".format(uri[ros_master_uri])
         env = os.environ.copy()
         env["ROS_MASTER_URI"] = rm_uri
+        env["PYTHONUNBUFFERED"] = "1"
 
         # settings for option
         formatted_cmd = template

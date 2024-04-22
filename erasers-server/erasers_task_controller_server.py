@@ -67,10 +67,16 @@ class ErasersTaskControlServer:
             log_file = node.get_log_file_path()
             with open(log_file, "r") as f:
                 while node.is_running():
-                    l =f.readlines()[-1]
+                    try:
+                        # l = f.readlines()[-1]
+                        l = f.readline()
+                        if l != "":
+                            await websocket.send_text(l)
 
-                    await websocket.send_text(l)
-                    await asyncio.sleep(0.1)
+                    except:
+                        print("last line")
+
+                    # await asyncio.sleep(0.1)
 
 def run_fastapi(path, ros_master_uri="localhost"):
     app = FastAPI()

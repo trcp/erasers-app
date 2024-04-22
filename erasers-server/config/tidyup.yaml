@@ -25,8 +25,8 @@ programs:
     display_name: Yolo
     description: Object detection and recognition for tidypu
     command:
-      template: 'docker compose -f /home/roboworks/erasers_ws/src/hsr/yolo-ros-docker/docker-compose.yml up'
-      kill: "docker compose -f /home/roboworks/erasers_ws/src/hsr/yolo-ros-docker/docker-compose.yml down"
+      template: 'docker compose -f /home/roboworks/erasers_ws_fix/src/vision/yolo-ros-docker/docker-compose.yml up'
+      kill: "docker compose -f /home/roboworks/erasers_ws_fix/src/vision/yolo-ros-docker/docker-compose.yml down"
       variables:
         home:
           type: env
