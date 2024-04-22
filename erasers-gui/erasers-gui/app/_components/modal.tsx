@@ -10,8 +10,8 @@ const style = {
     top: '50%',
     left: '50%',
     transform: 'translate(-50%, -50%)',
-    width: '90%',
-    height: '90%',
+    width: '80%',
+    height: '80%',
     bgcolor: 'background.paper',
     border: '2px solid #000',
     boxShadow: 24,
@@ -19,7 +19,7 @@ const style = {
 };
 
 const textstyle = {
-    fontSize: "h1.fontSize",
+    fontSize: "h5.fontSize",
     overflowWrap: "break-word",
     hyphens: "auto"
 }
