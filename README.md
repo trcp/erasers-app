@@ -19,7 +19,7 @@ Automatically launch chromium gui when the HSR is powerd on.
 
 Fill the below command in "Command(M)".  
 ```bash
-/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-translate --disable-translate-new-ux -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
+/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
 ```
 3. Remove the Check mark to prevent Toyota UI from starting automatically.
 ![IMG20230626213217](https://github.com/ry0hei-kobayashi/erasers-app-v2/assets/110576744/873dadde-3b1f-4fa5-97e6-1ef08e0fd4f0)
