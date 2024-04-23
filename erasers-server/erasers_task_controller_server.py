@@ -29,13 +29,22 @@ class ErasersTaskControlServer:
         self.router.add_api_route("/kill_task/{task_name}/{node_name}", self.kill_task, methods=["POST"])
         self.router.add_api_route("/task_running/{task_name}/{node_name}", self.task_running, methods=["GET"])
         self.router.add_api_websocket_route("/ws/{task_name}/{node_name}", self.websocket_endpoint)
+        self.router.add_api_route("/set_time/{task_name}/{node_name}", self.set_time, methods=["POST"])        
+
 
         self.task_data_list = task_data_list
 
         self.ros_master_uri = ros_master_uri
 
+    def set_time(self, task_name:str, node_name:str, body=Body(...)):
+        self.task_data_list[task_name].programs[node_name].command.variables["start_time"]["default"] = int(body)
+        
     def get_task(self):
         # return [self.task_data_list[key].to_json() for key in self.task_data_list]
+
+        for key in self.task_data_list:
+            print(self.task_data_list[key].to_json())
+        
         return {key: self.task_data_list[key].to_json() for key in self.task_data_list}
 
     def run_task(self, task_name:str, node_name:str, body=Body(...)):

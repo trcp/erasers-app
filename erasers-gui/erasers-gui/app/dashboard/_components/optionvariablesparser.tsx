@@ -54,7 +54,7 @@ export default function OptionVariables({ task_key, node_key, opt_key, index, de
 
     if (default_variables[opt_key].type == "duration") {
         const value = optionVariables[task_key][node_key][opt_key];
-        console.log("value-> ", value)
+        // console.log("value-> ", value)
         const d_value = default_variables[opt_key].default
         return (
             <>

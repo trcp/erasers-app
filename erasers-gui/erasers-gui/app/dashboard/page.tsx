@@ -22,6 +22,8 @@ import OptionVariables from "./_components/optionvariablesparser";
 import LogModal from "./_components/LogModal";
 import BasicSpeedDial from "../_components/speeddial";
 
+const hostNname = process.env.NEXT_PUBLIC_MASTER_HOSTNAME
+
 interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
@@ -50,6 +52,7 @@ function a11yProps(index: number) {
 
 export default function Dashboard() {
 
+
   const getTask = async () => {
     const response = await fetch("http://localhost:3001/get_task", { cache: 'no-store' });
     const tasks = await response.json();
@@ -64,12 +67,12 @@ export default function Dashboard() {
   }
 
   // RUN NODE
-  const getNowUnixTIme = () => {
-    const localDate = new Date();
-    const unixTime = Math.floor(localDate.getTime() / 1000); // ミリ秒から秒に変換
-    console.log('now time is -> ', unixTime)
-    return unixTime;
-  };
+    /* const getNowUnixTIme = () => {
+        const localDate = new Date();
+        const unixTime = Math.floor(localDate.getTime() / 1000); // ミリ秒から秒に変換
+        console.log('now time is -> ', unixTime)
+        return unixTime;
+      }; */
 
   const [runStatus, setRunStatus] = useState(null);
   const handleRunButtonClick = async (taskName, nodeName, debug, option) => {
@@ -82,9 +85,12 @@ export default function Dashboard() {
       for (const key of Object.keys(setedop)) {
         if (setedop[key] != undefined) {
           if (defaultop[key].type == 'unixtime') {
-            const startTime = getNowUnixTIme();
-            _body[key] = startTime;
-            optionVariables[taskName][nodeName][key] = startTime;
+              // const startTime = getNowUnixTIme();
+              // _body[key] = startTime;
+              _body[key] = optionVariables[taskName][nodeName][key]
+              console.log("here-> ", optionVariables[taskName][nodeName][key], key);
+              
+              // optionVariables[taskName][nodeName][key] = startTime;
           } else {
             _body[key] = setedop[key];
           }
@@ -200,7 +206,7 @@ export default function Dashboard() {
 
   const [optionVariables, setOptionVariable] = useState({});
 
-  console.log(" ================= render menu ========================")
+  // console.log(" ================= render menu ========================")
 
   return (
     <>
@@ -263,7 +269,7 @@ export default function Dashboard() {
                         </Box>
                         <FormControlLabel
                           key={node_key}
-                          label="Debug"
+                            label="Debug"
                           control={<Checkbox checked={debugChecked[task_index][node_index]} onChange={(e) => { handleChangeDebug(event, task_index, node_index) }} />}
                         />
                         <Button onClick={() => handleRunButtonClick(task_key, node_key, debugChecked[task_index][node_index], optionVariables)}>
