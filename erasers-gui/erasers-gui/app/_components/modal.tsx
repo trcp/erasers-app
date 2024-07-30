@@ -19,7 +19,7 @@ const style = {
 };
 
 const textstyle = {
-    fontSize: "h5.fontSize",
+    fontSize: "h2.fontSize",
     overflowWrap: "break-word",
     hyphens: "auto"
 }
