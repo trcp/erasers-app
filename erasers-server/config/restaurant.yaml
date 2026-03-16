@@ -1,7 +1,7 @@
 task:
-  task_name: tidyup
-  display_name: Tidyup
-  description: Copied Preset From HSR_GUI
+  task_name: restraunt
+  display_name: Restraunt
+  description: restraunt task
   author: erasers
 
 programs:
