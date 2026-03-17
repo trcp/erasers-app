@@ -132,7 +132,7 @@ export default function DataViewer() {
         </Box>
 
         <Box sx={{ flex: 1, overflow: 'auto', p: 2 }}>
-          <Grid container spacing={2} columns={{ xs: 1, sm: 2 }}>
+          <Grid container spacing={1} columns={{ xs: 1, sm: 2 }}>
             {Object.keys(jointState).map((key, index) => {
               const meta = topicMeta[key];
               const isStopped = stopData[key];

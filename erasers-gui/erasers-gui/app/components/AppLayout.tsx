@@ -2,10 +2,17 @@ import { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useRos } from '~/scripts/ros';
 import Box from '@mui/material/Box';
+import Chip from '@mui/material/Chip';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import Button from '@mui/material/Button';
 import HomeIcon from '@mui/icons-material/Home';
 import AssignmentIcon from '@mui/icons-material/Assignment';
 import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
@@ -13,6 +20,7 @@ import BarChartIcon from '@mui/icons-material/BarChart';
 import MapIcon from '@mui/icons-material/Map';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
+import WifiIcon from '@mui/icons-material/Wifi';
 
 const DRAWER_WIDTH = 80;
 
@@ -24,6 +32,13 @@ const navItems = [
   { icon: <MapIcon />, label: 'Map', path: '/mapcreator' },
 ];
 
+const HOST_CANDIDATES = [
+  'localhost',
+  '192.168.11.80',
+  '192.168.11.33',
+  '192.168.11.68',
+];
+
 interface AppLayoutProps {
   children: React.ReactNode;
   defaultOpen?: boolean;
@@ -33,7 +48,21 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(defaultOpen);
-  const { rosConnected } = useRos();
+  const { rosConnected, hostname, setHostname } = useRos();
+
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [inputValue, setInputValue] = useState(hostname);
+
+  const handleOpenDialog = () => {
+    setInputValue(hostname);
+    setDialogOpen(true);
+  };
+
+  const handleConnect = () => {
+    const trimmed = inputValue.trim();
+    if (trimmed) setHostname(trimmed);
+    setDialogOpen(false);
+  };
 
   return (
     <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
@@ -44,7 +73,7 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
           onClick={() => setOpen(true)}
           sx={{
             position: 'fixed',
-            top: 8,
+            bottom: 16,
             left: 8,
             zIndex: 1300,
             bgcolor: '#1565C0',
@@ -129,30 +158,88 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
           })}
         </Box>
 
-        {/* ROS connection indicator */}
-        <Box sx={{ pb: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        {/* ROS connection indicator (clickable) */}
+        <Tooltip title="ROS Settings" placement="right">
           <Box
+            onClick={handleOpenDialog}
             sx={{
-              width: 12,
-              height: 12,
-              borderRadius: '50%',
-              bgcolor: rosConnected ? '#4CAF50' : '#f44336',
-              mb: 0.5,
-              boxShadow: rosConnected
-                ? '0 0 6px rgba(76,175,80,0.8)'
-                : '0 0 6px rgba(244,67,54,0.8)',
+              pb: 2,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              cursor: 'pointer',
+              borderRadius: 2,
+              px: 1,
+              py: 0.5,
+              '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' },
             }}
-          />
-          <Typography sx={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)' }}>
-            ROS
-          </Typography>
-        </Box>
+          >
+            <Box
+              sx={{
+                width: 12,
+                height: 12,
+                borderRadius: '50%',
+                bgcolor: rosConnected ? '#4CAF50' : '#f44336',
+                mb: 0.5,
+                boxShadow: rosConnected
+                  ? '0 0 6px rgba(76,175,80,0.8)'
+                  : '0 0 6px rgba(244,67,54,0.8)',
+              }}
+            />
+            <Typography sx={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)' }}>
+              ROS
+            </Typography>
+          </Box>
+        </Tooltip>
       </Drawer>
 
       {/* Main content area */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'margin 0.2s ease' }}>
         {children}
       </Box>
+
+      {/* ROS Settings Dialog */}
+      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <WifiIcon fontSize="small" />
+          ROS Connection Settings
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Current: <code>{hostname}</code> — {rosConnected ? '🟢 Connected' : '🔴 Disconnected'}
+          </Typography>
+
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+            Candidates
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+            {HOST_CANDIDATES.map((h) => (
+              <Chip
+                key={h}
+                label={h}
+                size="small"
+                variant={inputValue === h ? 'filled' : 'outlined'}
+                color={inputValue === h ? 'primary' : 'default'}
+                onClick={() => setInputValue(h)}
+              />
+            ))}
+          </Box>
+
+          <TextField
+            label="Hostname / IP Address"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+            fullWidth
+            size="small"
+            placeholder="e.g. 192.168.1.100"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleConnect}>Connect</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }

@@ -1,4 +1,3 @@
-import xml2js from 'xml2js';
 import ROSLIB from 'roslib';
 import { useRos } from '~/scripts/ros';
 
@@ -36,18 +35,62 @@ async function readFile(file) {
     });
 }
 
+function elementToObj(el: Element): any {
+    const obj: any = {};
+    if (el.attributes.length > 0) {
+        obj['$'] = {};
+        for (let i = 0; i < el.attributes.length; i++) {
+            obj['$'][el.attributes[i].name] = el.attributes[i].value;
+        }
+    }
+    const childEls = Array.from(el.children);
+    if (childEls.length > 0) {
+        const groups: Record<string, Element[]> = {};
+        for (const child of childEls) {
+            (groups[child.tagName] = groups[child.tagName] || []).push(child);
+        }
+        for (const [tag, els] of Object.entries(groups)) {
+            obj[tag] = els.map(elementToObj);
+        }
+    } else {
+        const text = el.textContent?.trim();
+        if (text) obj['_'] = text;
+    }
+    return obj;
+}
+
 async function xmlToJson(xml) {
-    var res = null;
-    xml2js.parseString(xml, function (err, result) {
-        res = result;
-    });
-    return res;
+    const doc = new DOMParser().parseFromString(xml, 'text/xml');
+    const err = doc.querySelector('parsererror');
+    if (err) throw new Error(err.textContent ?? 'XML parse error');
+    const root = doc.documentElement;
+    return { [root.tagName]: elementToObj(root) };
+}
+
+function objToXml(tagName: string, obj: any, indent = ''): string {
+    if (typeof obj === 'string' || typeof obj === 'number') {
+        return `${indent}<${tagName}>${obj}</${tagName}>`;
+    }
+    const attrs = obj['$']
+        ? ' ' + Object.entries(obj['$']).map(([k, v]) => `${k}="${v}"`).join(' ')
+        : '';
+    const children: string[] = [];
+    for (const [key, val] of Object.entries(obj)) {
+        if (key === '$' || key === '_') continue;
+        if (Array.isArray(val)) {
+            for (const item of val) children.push(objToXml(key, item, indent + '  '));
+        } else {
+            children.push(objToXml(key, val as any, indent + '  '));
+        }
+    }
+    if (obj['_']) children.push(indent + '  ' + obj['_']);
+    if (children.length === 0) return `${indent}<${tagName}${attrs}/>`;
+    return `${indent}<${tagName}${attrs}>\n${children.join('\n')}\n${indent}</${tagName}>`;
 }
 
 async function jsonToXml(json_obj) {
-    var builder = new xml2js.Builder();
-    var xml = builder.buildObject(json_obj);
-    return xml;
+    const [rootTag, rootVal] = Object.entries(json_obj)[0];
+    return `<?xml version="1.0" encoding="UTF-8"?>\n${objToXml(rootTag as string, rootVal)}`;
 }
 
 export default function MapCreator() {
@@ -209,7 +252,7 @@ export default function MapCreator() {
                     <Divider orientation="vertical" flexItem />
                     <Chip
                         icon={<RouterIcon />}
-                        label={connectRos ? 'ROS Connected' : 'Connect ROS'}
+                        label={connectRos ? 'Tracking Robot Pose' : 'Track Robot Pose'}
                         color={connectRos ? 'success' : 'default'}
                         variant={connectRos ? 'filled' : 'outlined'}
                         onClick={() => setConnectRos(true)}
