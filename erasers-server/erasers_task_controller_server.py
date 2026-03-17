@@ -5,6 +5,7 @@ import sys
 import logging
 import subprocess
 import json
+import socket
 import threading
 from threading import Thread
 import tkinter as tk
@@ -207,10 +208,12 @@ def run_tkinter(start_event, app_state):
     nif_frame = tk.Frame(root)
     nif_frame.pack(pady=5)
     tk.Label(nif_frame, text="Network IF:").pack(side=tk.LEFT)
-    nif_options = ["wlo1", "enp3s0"]
+    nif_options = [name for _, name in socket.if_nameindex() if name != "lo"]
     nif_combo = ttk.Combobox(nif_frame, values=nif_options, width=12)
     nif_combo.pack(side=tk.LEFT, padx=4)
-    nif_combo.set(app_state["network_if"])
+    default_nif = app_state["network_if"] if app_state["network_if"] in nif_options else (nif_options[0] if nif_options else "")
+    nif_combo.set(default_nif)
+    app_state["network_if"] = default_nif
 
     def on_nif_selected(event):
         app_state["network_if"] = nif_combo.get()
