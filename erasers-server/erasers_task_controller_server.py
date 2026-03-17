@@ -52,8 +52,12 @@ class ErasersTaskControlServer:
         nif_names = [name for _, name in socket.if_nameindex() if name != "lo"]
         self.execution_config = {
             "network_if": nif_names[0] if nif_names else "",
-            "compose_path": str(Path.home() / "erasers_ws" / "compose.yaml"),
         }
+
+        # initialize each node's compose_path to the default
+        for task in task_data_list.values():
+            for node in task.programs.values():
+                node.compose_path = "~/erasers_ws/compose.yaml"
 
     def get_xml(self, path: str):
         p = Path(path).resolve()
@@ -83,6 +87,7 @@ class ErasersTaskControlServer:
             for node_key, node in task.programs.items():
                 if node_key in task_json.get("programs", {}):
                     task_json["programs"][node_key]["docker_mode"] = node.docker_mode
+                    task_json["programs"][node_key]["compose_path"] = node.compose_path
             result[key] = task_json
             logger.info(task_json)
         return result
@@ -117,16 +122,12 @@ class ErasersTaskControlServer:
     def set_execution_config(self, body=Body(...)):
         if "network_if" in body:
             self.execution_config["network_if"] = body["network_if"]
-        if "compose_path" in body:
-            self.execution_config["compose_path"] = body["compose_path"]
         if "ros_master_uri" in body:
             self.ros_master_uri = body["ros_master_uri"]
         network_if = self.execution_config["network_if"]
-        compose_path = self.execution_config["compose_path"]
         for task in self.task_data_list.values():
             for node in task.programs.values():
                 node.network_if = network_if
-                node.compose_path = compose_path
         return {"ok": True}
 
     def set_node_config(self, task_name: str, node_name: str, body=Body(...)):
@@ -135,6 +136,8 @@ class ErasersTaskControlServer:
             node.docker_mode = body["docker_mode"]
             if body["docker_mode"]:
                 subprocess.run(["xhost", "+"], check=False)
+        if "compose_path" in body:
+            node.compose_path = body["compose_path"]
         return {"ok": True}
 
     async def websocket_endpoint(self, websocket: WebSocket, task_name: str, node_name: str):

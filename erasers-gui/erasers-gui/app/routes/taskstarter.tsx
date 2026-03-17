@@ -62,9 +62,9 @@ export default function TaskStarter() {
   // --- Execution config ---
   const [networkIf, setNetworkIf] = useState('');
   const [networkIp, setNetworkIp] = useState('');
-  const [composePath, setComposePath] = useState('');
   const [networkInterfaces, setNetworkInterfaces] = useState<{ name: string; ip: string }[]>([]);
   const [nodeDockerMode, setNodeDockerMode] = useState<Record<string, Record<string, boolean>>>({});
+  const [nodeComposePath, setNodeComposePath] = useState<Record<string, Record<string, string>>>({});
 
   const fetchExecutionConfig = async (ip: string) => {
     const [cfgRes, nifRes] = await Promise.all([
@@ -78,14 +78,13 @@ export default function TaskStarter() {
     const currentNif = cfg.network_if ?? '';
     setNetworkIf(currentNif);
     setNetworkIp(interfaces.find((i) => i.name === currentNif)?.ip ?? '');
-    setComposePath(cfg.compose_path ?? '');
   };
 
-  const applyExecutionConfig = async (ip: string, nif: string, cpath: string, rosMaster?: string) => {
+  const applyExecutionConfig = async (ip: string, nif: string, rosMaster?: string) => {
     await fetch(`http://${ip}:3001/set_execution_config`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ network_if: nif, compose_path: cpath, ros_master_uri: rosMaster ?? hostname }),
+      body: JSON.stringify({ network_if: nif, ros_master_uri: rosMaster ?? hostname }),
     });
   };
 
@@ -99,6 +98,18 @@ export default function TaskStarter() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ docker_mode: dockerMode }),
+    });
+  };
+
+  const handleNodeComposePathChange = async (taskName: string, nodeName: string, path: string) => {
+    setNodeComposePath((prev) => ({
+      ...prev,
+      [taskName]: { ...prev[taskName], [nodeName]: path },
+    }));
+    await fetch(`http://${serverIp}:3001/set_node_config/${taskName}/${nodeName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ compose_path: path }),
     });
   };
 
@@ -186,19 +197,24 @@ export default function TaskStarter() {
 
     var runStatusDict: any = {};
     var dockerModeDict: Record<string, Record<string, boolean>> = {};
+    var composePathDict: Record<string, Record<string, string>> = {};
     for (var task_k in tsData) {
       var K: any = {};
       var D: Record<string, boolean> = {};
+      var C: Record<string, string> = {};
       for (var node_k in tsData[task_k].programs) {
         const res = await fetch(`http://${ip}:3001/task_running/${task_k}/${node_k}`, { cache: 'no-store' }).then(r => r.json());
         K[node_k] = res.is_running;
         D[node_k] = tsData[task_k].programs[node_k].docker_mode ?? false;
+        C[node_k] = tsData[task_k].programs[node_k].compose_path ?? '';
       }
       runStatusDict[task_k] = K;
       dockerModeDict[task_k] = D;
+      composePathDict[task_k] = C;
     }
     setRunStatus({ ...runStatusDict });
     setNodeDockerMode(dockerModeDict);
+    setNodeComposePath(composePathDict);
     setTaskData(tsData);
   };
 
@@ -206,7 +222,7 @@ export default function TaskStarter() {
     setConnectError('');
     try {
       await Promise.all([loadTasks(serverIpInput), fetchExecutionConfig(serverIpInput)]);
-      await applyExecutionConfig(serverIpInput, networkIf, composePath, hostname);
+      await applyExecutionConfig(serverIpInput, networkIf, hostname);
       setServerIp(serverIpInput);
     } catch {
       setConnectError(`サーバー (${serverIpInput}:3001) に接続できません。`);
@@ -219,7 +235,7 @@ export default function TaskStarter() {
 
   useEffect(() => {
     if (serverIp) {
-      applyExecutionConfig(serverIp, networkIf, composePath, hostname).catch(() => {});
+      applyExecutionConfig(serverIp, networkIf, hostname).catch(() => {});
     }
   }, [hostname]);
 
@@ -273,7 +289,7 @@ export default function TaskStarter() {
                 const selected = e.target.value;
                 setNetworkIf(selected);
                 setNetworkIp(networkInterfaces.find((i) => i.name === selected)?.ip ?? '');
-                applyExecutionConfig(serverIp, selected, composePath);
+                applyExecutionConfig(serverIp, selected);
               }}
             >
               {networkInterfaces.map((iface) => (
@@ -286,16 +302,6 @@ export default function TaskStarter() {
               {networkIp}
             </Typography>
           )}
-
-          <TextField
-            label="compose.yaml"
-            size="small"
-            value={composePath}
-            onChange={(e) => setComposePath(e.target.value)}
-            onBlur={() => applyExecutionConfig(serverIp, networkIf, composePath)}
-            onKeyDown={(e) => { if (e.key === 'Enter') applyExecutionConfig(serverIp, networkIf, composePath); }}
-            sx={{ minWidth: 260 }}
-          />
         </Box>
 
         <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -398,6 +404,24 @@ export default function TaskStarter() {
                                 <ToggleButton value="local">Local</ToggleButton>
                                 <ToggleButton value="docker">Docker</ToggleButton>
                               </ToggleButtonGroup>
+                              {nodeDockerMode[task_key]?.[node_key] && (
+                                <TextField
+                                  label="compose.yaml"
+                                  size="small"
+                                  value={nodeComposePath[task_key]?.[node_key] ?? ''}
+                                  onChange={(e) =>
+                                    setNodeComposePath((prev) => ({
+                                      ...prev,
+                                      [task_key]: { ...prev[task_key], [node_key]: e.target.value },
+                                    }))
+                                  }
+                                  onBlur={() => handleNodeComposePathChange(task_key, node_key, nodeComposePath[task_key]?.[node_key] ?? '')}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') handleNodeComposePathChange(task_key, node_key, nodeComposePath[task_key]?.[node_key] ?? '');
+                                  }}
+                                  sx={{ minWidth: 260 }}
+                                />
+                              )}
                               <FormControlLabel
                                 label="Debug"
                                 control={

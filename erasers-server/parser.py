@@ -71,7 +71,7 @@ class NodeData:
         if self.docker_mode:
             display = os.environ.get("DISPLAY", ":0")
             cmd = [
-                "docker", "compose", "-f", self.compose_path,
+                "docker", "compose", "-f", os.path.expanduser(self.compose_path),
                 "run", "--rm",
                 "-e", f"NETWORK_IF={self.network_if}",
                 "-e", f"ROS_MASTER_URI={rm_uri}",
