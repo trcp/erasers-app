@@ -106,13 +106,16 @@ class ErasersTaskControlServer:
                         break
 
 
-def run_fastapi(path, ros_master_uri="localhost"):
+def run_fastapi(path, ros_master_uri="localhost", docker_mode=False, network_if="wlo1", compose_path=""):
     logger.info("run fastapi")
+
+    if docker_mode:
+        subprocess.run(["xhost", "+"], check=False)
 
     yaml_path = [os.path.join(path, i) for i in os.listdir(path) if i.endswith(".yaml")]
     task_data_list = {}
     for p in yaml_path:
-        task_data = TaskData(p)
+        task_data = TaskData(p, docker_mode=docker_mode, network_if=network_if, compose_path=compose_path)
         task_name = task_data.task_name
         task_data_list[task_name] = task_data
 
@@ -141,8 +144,26 @@ def run_tkinter(start_event, app_state):
     logger.info("run tkinter")
     root = tk.Tk()
     root.title("erasers-app")
-    root.geometry("400x280")
+    root.geometry("400x380")
     root.resizable(True, True)
+
+    # --- Execution Mode ---
+    mode_var = tk.StringVar(value="local")
+
+    def on_mode_changed():
+        app_state["execution_mode"] = mode_var.get()
+        if mode_var.get() == "docker":
+            docker_frame.pack(pady=5, fill=tk.X, padx=10)
+        else:
+            docker_frame.pack_forget()
+
+    mode_frame = tk.Frame(root)
+    mode_frame.pack(pady=5, fill=tk.X, padx=10)
+    tk.Label(mode_frame, text="Execution Mode:").pack(side=tk.LEFT)
+    tk.Radiobutton(mode_frame, text="Local (ROS)", variable=mode_var, value="local",
+                   command=on_mode_changed).pack(side=tk.LEFT, padx=4)
+    tk.Radiobutton(mode_frame, text="Docker", variable=mode_var, value="docker",
+                   command=on_mode_changed).pack(side=tk.LEFT, padx=4)
 
     # --- Folder selection ---
     def open_folder_dialog():
@@ -182,6 +203,46 @@ def run_tkinter(start_event, app_state):
     app_state["ros_master_uri"] = options[0]
     combobox.bind("<<ComboboxSelected>>", on_combobox_selected)
 
+    # --- Network IF (always visible) ---
+    nif_frame = tk.Frame(root)
+    nif_frame.pack(pady=5)
+    tk.Label(nif_frame, text="Network IF:").pack(side=tk.LEFT)
+    nif_options = ["wlo1", "enp3s0"]
+    nif_combo = ttk.Combobox(nif_frame, values=nif_options, width=12)
+    nif_combo.pack(side=tk.LEFT, padx=4)
+    nif_combo.set(app_state["network_if"])
+
+    def on_nif_selected(event):
+        app_state["network_if"] = nif_combo.get()
+
+    nif_combo.bind("<<ComboboxSelected>>", on_nif_selected)
+
+    # --- Docker Settings (hidden by default) ---
+    docker_frame = tk.LabelFrame(root, text="Docker Settings")
+
+    compose_row = tk.Frame(docker_frame)
+    compose_row.pack(pady=3, fill=tk.X, padx=5)
+    tk.Label(compose_row, text="compose.yaml:").pack(side=tk.LEFT)
+    compose_entry = tk.Entry(compose_row, width=24)
+    compose_entry.pack(side=tk.LEFT, padx=4)
+    compose_entry.insert(0, app_state["compose_path"])
+
+    def browse_compose():
+        p = filedialog.askopenfilename(
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
+        )
+        if p:
+            compose_entry.delete(0, tk.END)
+            compose_entry.insert(0, p)
+            app_state["compose_path"] = p
+
+    def on_compose_entry_change(*_):
+        app_state["compose_path"] = compose_entry.get()
+
+    compose_entry.bind("<FocusOut>", on_compose_entry_change)
+    compose_entry.bind("<Return>", on_compose_entry_change)
+    tk.Button(compose_row, text="Browse", command=browse_compose).pack(side=tk.LEFT)
+
     # --- Buttons ---
     button_frame = tk.Frame(root)
     button_frame.pack(pady=5)
@@ -192,13 +253,23 @@ def run_tkinter(start_event, app_state):
         if not config_path:
             messagebox.showerror("Error", "Please select a valid config folder first.")
             return
+        # sync compose path from entry widget before starting
+        app_state["compose_path"] = compose_entry.get()
+
+        execution_mode = app_state.get("execution_mode", "local")
+        docker_mode = execution_mode == "docker"
+        network_if = app_state.get("network_if", "wlo1")
+        compose_path = app_state.get("compose_path", "")
+
         status_label.config(text="\u27f3 Starting...", fg="orange")
         run_button.config(state=tk.DISABLED)
 
         def _start():
             try:
                 start_event.set()
-                run_fastapi(config_path, ros_master_uri=ros_master_uri)
+                run_fastapi(config_path, ros_master_uri=ros_master_uri,
+                            docker_mode=docker_mode, network_if=network_if,
+                            compose_path=compose_path)
             except Exception as e:
                 logger.error(f"FastAPI error: {e}")
                 root.after(0, lambda: status_label.config(text=f"Error: {e}", fg="red"))
@@ -242,7 +313,13 @@ if __name__ == "__main__":
     logger.info("start")
 
     start_event = threading.Event()
-    app_state = {"config_path": None, "ros_master_uri": None}
+    app_state = {
+        "config_path": None,
+        "ros_master_uri": None,
+        "execution_mode": "local",
+        "network_if": "wlo1",
+        "compose_path": str(Path.home() / "erasers_ws" / "compose.yaml"),
+    }
 
     tkinter_thread = Thread(target=run_tkinter, args=(start_event, app_state), daemon=True)
     tkinter_thread.start()

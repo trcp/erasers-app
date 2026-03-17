@@ -7,6 +7,24 @@ import subprocess
 
 import yaml
 import json
+import socket
+import fcntl
+import struct
+
+
+def get_ip_address(ifname):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        return socket.inet_ntoa(fcntl.ioctl(
+            s.fileno(),
+            0x8915,  # SIOCGIFADDR
+            struct.pack('256s', ifname[:15].encode('utf-8'))
+        )[20:24])
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
 
 class NodeData:
     def __init__(self):
@@ -25,6 +43,10 @@ class NodeData:
         self.log_file = None
         self.log_file_name = None
 
+        self.docker_mode = False
+        self.network_if = "wlo1"
+        self.compose_path = ""
+
     def build_cmd(self, template, ros_master_uri, opt):
         print("-"*100)
         print(template)
@@ -36,7 +58,6 @@ class NodeData:
         uri = {"hsrb80": "192.168.11.80", "hsrb33": "192.168.11.33", "localhost": "localhost"}
         rm_uri = "http://{}:11311".format(uri[ros_master_uri])
         env = os.environ.copy()
-        env["ROS_MASTER_URI"] = rm_uri
         env["PYTHONUNBUFFERED"] = "1"
 
         # settings for option
@@ -44,10 +65,25 @@ class NodeData:
         for key, value in opt.items():
             formatted_cmd = formatted_cmd.replace(f'${{{key}}}', str(value))
 
-        # cmd = rm_uri + " " + formatted_cmd
-        cmd = formatted_cmd.split(" ")
-        
-        # cmd = ["python3", "-u", "sample_not_ros.py"]
+        ros_ip = get_ip_address(self.network_if)
+
+        if self.docker_mode:
+            display = os.environ.get("DISPLAY", ":0")
+            cmd = [
+                "docker", "compose", "-f", self.compose_path,
+                "run", "--rm",
+                "-e", f"NETWORK_IF={self.network_if}",
+                "-e", f"ROS_MASTER_URI={rm_uri}",
+                "-e", f"ROS_IP={ros_ip}",
+                "-e", f"DISPLAY={display}",
+                "hsrb",
+                "bash", "-ic", f"hsrb_mode && {formatted_cmd}"
+            ]
+        else:
+            env["ROS_MASTER_URI"] = rm_uri
+            env["ROS_IP"] = ros_ip
+            cmd = formatted_cmd.split(" ")
+
         return cmd, env
 
     def run(self, body, ros_master_uri):
@@ -111,10 +147,10 @@ class NodeData:
         # return self.proc.poll() is None
 
 class TaskData:
-    def __init__(self, path):
+    def __init__(self, path, docker_mode=False, network_if="wlo1", compose_path=""):
 
         config = self._load_yaml(path)
-        
+
         self.task_name = config["task"]["task_name"]
         self.display_name = config["task"]["display_name"]
         self.description = config["task"]["description"]
@@ -130,6 +166,9 @@ class TaskData:
             node_data.command.template = config["programs"][node]["command"]["template"]
             node_data.command.kill = config["programs"][node]["command"]["kill"]
             node_data.command.variables = config["programs"][node]["command"]["variables"]
+            node_data.docker_mode = docker_mode
+            node_data.network_if = network_if
+            node_data.compose_path = compose_path
 
             self.programs[node] = node_data
 
