@@ -23,6 +23,13 @@ import SaveIcon from '@mui/icons-material/Save';
 import RouterIcon from '@mui/icons-material/Router';
 import PlaceIcon from '@mui/icons-material/Place';
 
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import LinkIcon from '@mui/icons-material/Link';
+import Dialog from '@mui/material/Dialog';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogTitle from '@mui/material/DialogTitle';
+
 import AppLayout from '~/components/AppLayout';
 import { AddNewLocationModal, AddRoomModal, MapModal } from '~/components/mapcreator/modal';
 
@@ -111,22 +118,50 @@ export default function MapCreator() {
         setMapLocModal({ ...tmp });
     };
 
-    const [saveFileName, setSaveFileName] = useState(null);
+    const [loadSource, setLoadSource] = useState<'file' | 'paste' | 'url' | null>(null);
+    const [saveFileName, setSaveFileName] = useState('');
     const downloadAnchorRef = useRef<HTMLAnchorElement>(null);
     const handleSaveFile = async () => {
-        const res = await jsonToXml(fileContent);
-        const link = downloadAnchorRef.current;
-        if (!link) return;
-        const blob = new Blob([res], { type: 'text/xml;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', saveFileName);
-        link.click();
+        const xmlString = await jsonToXml(fileContent);
+        if (loadSource === 'url') {
+            try {
+                const res = await fetch(`http://${serverIp}:3001/save_xml?path=${saveFileName}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content: xmlString }),
+                });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                alert(`保存しました: ${xmlPath}`);
+            } catch (error) {
+                alert(`サーバーへの保存に失敗しました: ${error.message}`);
+            }
+        } else {
+            const link = downloadAnchorRef.current;
+            if (!link) return;
+            const blob = new Blob([xmlString], { type: 'text/xml;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', saveFileName);
+            link.click();
+        }
     };
 
     const handleFileChange = (event) => {
         const file = event.target.files[0];
         setSelectedFile(file);
+    };
+
+    const applyXml = (jsonTxt: any) => {
+        var truefalseind = [];
+        for (var i = 0; i < jsonTxt.locations.room.length; i++) {
+            truefalseind.push([]);
+            for (var j = 0; j < jsonTxt.locations.room[i].location.length; j++) {
+                truefalseind[i].push(false);
+            }
+        }
+        setMapLocModal(truefalseind);
+        setOpenAddNewLocationModal(Array(truefalseind.length).fill(false));
+        setFileContent(jsonTxt);
     };
 
     const handleFileLoad = async () => {
@@ -142,22 +177,62 @@ export default function MapCreator() {
         try {
             const content = await readFile(selectedFile);
             const jsonTxt = await xmlToJson(content);
-
-            var truefalseind = [];
-            for (var i = 0; i < jsonTxt.locations.room.length; i++) {
-                truefalseind.push([]);
-                for (var j = 0; j < jsonTxt.locations.room[i].location.length; j++) {
-                    truefalseind[i].push(false);
-                }
-            }
-
-            setMapLocModal(truefalseind);
-            setOpenAddNewLocationModal(Array(truefalseind.length).fill(false));
-            setFileContent(jsonTxt);
-
+            applyXml(jsonTxt);
+            setSaveFileName(selectedFile.name);
+            setLoadSource('file');
         } catch (error) {
             console.error('Error reading file:', error);
             alert('Failed to read file. Please try again.');
+        }
+    };
+
+    const [pasteDialogOpen, setPasteDialogOpen] = useState(false);
+    const [pasteText, setPasteText] = useState('');
+    const handlePasteLoad = async () => {
+        try {
+            const jsonTxt = await xmlToJson(pasteText);
+            applyXml(jsonTxt);
+            setLoadSource('paste');
+            setPasteDialogOpen(false);
+            setPasteText('');
+        } catch (error) {
+            console.error('Error parsing XML:', error);
+            alert('Failed to parse XML. Please check the content and try again.');
+        }
+    };
+
+    const [urlDialogOpen, setUrlDialogOpen] = useState(false);
+    const [serverIp, setServerIp] = useState('');
+    const [xmlPath, setXmlPath] = useState('');
+    const [urlError, setUrlError] = useState('');
+    const builtUrl = serverIp && xmlPath ? `http://${serverIp}:3001/get_xml?path=${xmlPath}` : '';
+    const handleUrlLoad = async () => {
+        setUrlError('');
+        if (!builtUrl) {
+            setUrlError('IPアドレスとファイルパスを入力してください。');
+            return;
+        }
+        try {
+            const healthRes = await fetch(`http://${serverIp}:3001/get_task`).catch(() => null);
+            if (!healthRes || !healthRes.ok) {
+                setUrlError(`サーバー (${serverIp}:3001) に接続できません。erasers-server が起動しているか確認してください。`);
+                return;
+            }
+        } catch {
+            setUrlError(`サーバー (${serverIp}:3001) に接続できません。erasers-server が起動しているか確認してください。`);
+            return;
+        }
+        try {
+            const response = await fetch(builtUrl);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            const text = await response.text();
+            const jsonTxt = await xmlToJson(text);
+            applyXml(jsonTxt);
+            setLoadSource('url');
+            setSaveFileName(xmlPath);
+            setUrlDialogOpen(false);
+        } catch (error) {
+            setUrlError(`XMLの読み込みに失敗しました: ${error.message}`);
         }
     };
 
@@ -208,7 +283,6 @@ export default function MapCreator() {
             setMapLocModal(truefalseind);
             setOpenAddNewLocationModal(Array(truefalseind.length).fill(false));
         }
-        return () => { };
     }, [fileContent]);
 
     return (
@@ -237,17 +311,23 @@ export default function MapCreator() {
                     <Button variant="contained" startIcon={<FolderOpenIcon />} onClick={handleFileLoad}>
                         Load
                     </Button>
+                    <Button variant="outlined" startIcon={<ContentPasteIcon />} onClick={() => setPasteDialogOpen(true)}>
+                        Paste XML
+                    </Button>
+                    <Button variant="outlined" startIcon={<LinkIcon />} onClick={() => setUrlDialogOpen(true)}>
+                        Load from URL
+                    </Button>
                     <Divider orientation="vertical" flexItem />
                     <TextField
-                        label="Filename (.xml)"
+                        label={loadSource === 'url' ? 'Save path' : 'Filename (.xml)'}
                         size="small"
-                        defaultValue=""
+                        value={saveFileName}
                         onChange={(e) => setSaveFileName(e.target.value)}
-                        sx={{ minWidth: 160 }}
+                        sx={{ minWidth: 240 }}
                     />
                     <a ref={downloadAnchorRef} className='hidden' />
-                    <Button variant="outlined" startIcon={<SaveIcon />} onClick={handleSaveFile}>
-                        Save
+                    <Button variant="outlined" startIcon={<SaveIcon />} onClick={handleSaveFile} disabled={!fileContent}>
+                        {loadSource === 'url' ? 'Save to Server' : 'Save'}
                     </Button>
                     <Divider orientation="vertical" flexItem />
                     <Chip
@@ -348,6 +428,60 @@ export default function MapCreator() {
                     )}
                 </Box>
             </Box>
+            {/* Paste XML Dialog */}
+            <Dialog open={pasteDialogOpen} onClose={() => setPasteDialogOpen(false)} fullWidth maxWidth="md">
+                <DialogTitle>Paste XML</DialogTitle>
+                <DialogContent>
+                    <TextField
+                        multiline
+                        rows={12}
+                        fullWidth
+                        value={pasteText}
+                        onChange={(e) => setPasteText(e.target.value)}
+                        placeholder="<?xml version=&quot;1.0&quot; ...?>"
+                        sx={{ mt: 1, fontFamily: 'monospace' }}
+                    />
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPasteDialogOpen(false)}>Cancel</Button>
+                    <Button variant="contained" onClick={handlePasteLoad}>Load</Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Load from URL Dialog */}
+            <Dialog open={urlDialogOpen} onClose={() => { setUrlDialogOpen(false); setUrlError(''); }} fullWidth maxWidth="sm">
+                <DialogTitle>Load from URL</DialogTitle>
+                <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+                    <TextField
+                        label="サーバー IP"
+                        fullWidth
+                        value={serverIp}
+                        onChange={(e) => setServerIp(e.target.value)}
+                        placeholder="192.168.1.10"
+                    />
+                    <TextField
+                        label="ファイルパス"
+                        fullWidth
+                        value={xmlPath}
+                        onChange={(e) => setXmlPath(e.target.value)}
+                        placeholder="/home/roboworks/map.xml"
+                    />
+                    {builtUrl && (
+                        <Typography variant="caption" sx={{ fontFamily: 'monospace', color: 'text.secondary', wordBreak: 'break-all' }}>
+                            {builtUrl}
+                        </Typography>
+                    )}
+                    {urlError && (
+                        <Typography variant="body2" color="error">
+                            {urlError}
+                        </Typography>
+                    )}
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => { setUrlDialogOpen(false); setUrlError(''); }}>Cancel</Button>
+                    <Button variant="contained" onClick={handleUrlLoad} disabled={!builtUrl}>Load</Button>
+                </DialogActions>
+            </Dialog>
         </AppLayout>
     );
 }

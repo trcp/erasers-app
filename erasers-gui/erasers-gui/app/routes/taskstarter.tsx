@@ -11,10 +11,12 @@ import {
   Checkbox,
   FormControlLabel,
   LinearProgress,
+  TextField,
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import ArticleIcon from '@mui/icons-material/Article';
+import RouterIcon from '@mui/icons-material/Router';
 
 import OptionVariables from '~/components/dashboard/OptionVariablesParser';
 import LogModal from '~/components/dashboard/LogModal';
@@ -43,14 +45,18 @@ function a11yProps(index: number) {
 
 export default function TaskStarter() {
 
-  const getTask = async () => {
-    const response = await fetch("http://localhost:3001/get_task", { cache: 'no-store' });
+  const [serverIp, setServerIp] = useState('localhost');
+  const [serverIpInput, setServerIpInput] = useState('localhost');
+  const [connectError, setConnectError] = useState('');
+
+  const getTask = async (ip: string) => {
+    const response = await fetch(`http://${ip}:3001/get_task`, { cache: 'no-store' });
     const tasks = await response.json();
     return tasks;
   };
 
   const getTaskRunning = async (taskName: string, nodeName: string) => {
-    const response = await fetch(`http://localhost:3001/task_running/${taskName}/${nodeName}`, { cache: 'no-store' });
+    const response = await fetch(`http://${serverIp}:3001/task_running/${taskName}/${nodeName}`, { cache: 'no-store' });
     const is_running = await response.json();
     return is_running;
   };
@@ -72,7 +78,7 @@ export default function TaskStarter() {
       }
     }
 
-    const response = await fetch(`http://localhost:3001/run_task/${taskName}/${nodeName}`, {
+    const response = await fetch(`http://${serverIp}:3001/run_task/${taskName}/${nodeName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(_body),
@@ -86,7 +92,7 @@ export default function TaskStarter() {
   };
 
   const handleKillButtonClick = async (taskName, nodeName) => {
-    const response = await fetch(`http://localhost:3001/kill_task/${taskName}/${nodeName}`, {
+    const response = await fetch(`http://${serverIp}:3001/kill_task/${taskName}/${nodeName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -112,34 +118,44 @@ export default function TaskStarter() {
   };
 
   const [taskData, setTaskData] = useState<any>();
-  useEffect(() => {
-    getTask().then(tsData => {
-      var checkboxLength: boolean[][] = [];
-      for (var task_k in tsData) {
-        var L: boolean[] = [];
-        for (var i = 0; i < Object.keys(tsData[task_k].programs).length; i++) {
-          L.push(false);
-        }
-        checkboxLength.push(L);
+
+  const loadTasks = async (ip: string) => {
+    const tsData = await getTask(ip);
+    var checkboxLength: boolean[][] = [];
+    for (var task_k in tsData) {
+      var L: boolean[] = [];
+      for (var i = 0; i < Object.keys(tsData[task_k].programs).length; i++) {
+        L.push(false);
       }
-      setDebugChecked(checkboxLength);
+      checkboxLength.push(L);
+    }
+    setDebugChecked(checkboxLength);
 
-      const fetchTaskStatus = async () => {
-        var runStatusDict: any = {};
-        for (var task_k in tsData) {
-          var K: any = {};
-          for (var node_k in tsData[task_k].programs) {
-            const res = await getTaskRunning(task_k, node_k);
-            K[node_k] = res.is_running;
-          }
-          runStatusDict[task_k] = K;
-        }
-        setRunStatus({ ...runStatusDict });
-      };
+    var runStatusDict: any = {};
+    for (var task_k in tsData) {
+      var K: any = {};
+      for (var node_k in tsData[task_k].programs) {
+        const res = await fetch(`http://${ip}:3001/task_running/${task_k}/${node_k}`, { cache: 'no-store' }).then(r => r.json());
+        K[node_k] = res.is_running;
+      }
+      runStatusDict[task_k] = K;
+    }
+    setRunStatus({ ...runStatusDict });
+    setTaskData(tsData);
+  };
 
-      fetchTaskStatus();
-      setTaskData(tsData);
-    });
+  const handleConnect = async () => {
+    setConnectError('');
+    try {
+      await loadTasks(serverIpInput);
+      setServerIp(serverIpInput);
+    } catch {
+      setConnectError(`サーバー (${serverIpInput}:3001) に接続できません。`);
+    }
+  };
+
+  useEffect(() => {
+    loadTasks('localhost').catch(() => {});
   }, []);
 
   const [tabValue, setTabValue] = useState(0);
@@ -151,12 +167,32 @@ export default function TaskStarter() {
 
   return (
     <AppLayout>
-      <LogModal openModal={openLogModal} />
+      <LogModal openModal={openLogModal} serverIp={serverIp} />
 
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header */}
         <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>Task Starter</Typography>
+        </Box>
+        <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+          <TextField
+            label="Server IP"
+            size="small"
+            value={serverIpInput}
+            onChange={(e) => setServerIpInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+            placeholder="192.168.1.10"
+            sx={{ minWidth: 180 }}
+          />
+          <Button variant="contained" startIcon={<RouterIcon />} onClick={handleConnect}>
+            Connect
+          </Button>
+          {connectError && (
+            <Typography variant="body2" color="error">{connectError}</Typography>
+          )}
+          {taskData && !connectError && (
+            <Typography variant="body2" color="success.main">接続済み: {serverIp}:3001</Typography>
+          )}
         </Box>
 
         <Box sx={{ flex: 1, overflow: 'auto' }}>

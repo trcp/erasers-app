@@ -8,13 +8,19 @@ import json
 from threading import Thread
 import tkinter as tk
 from tkinter import filedialog, ttk
+from pathlib import Path
 
 import webbrowser
 
 import asyncio
 import uvicorn
-from fastapi import FastAPI, APIRouter, WebSocket, Body
+from fastapi import FastAPI, APIRouter, WebSocket, Body, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+class XmlSaveBody(BaseModel):
+    content: str
 
 from parser import TaskData
 
@@ -29,12 +35,30 @@ class ErasersTaskControlServer:
         self.router.add_api_route("/kill_task/{task_name}/{node_name}", self.kill_task, methods=["POST"])
         self.router.add_api_route("/task_running/{task_name}/{node_name}", self.task_running, methods=["GET"])
         self.router.add_api_websocket_route("/ws/{task_name}/{node_name}", self.websocket_endpoint)
-        self.router.add_api_route("/set_time/{task_name}/{node_name}", self.set_time, methods=["POST"])        
-
+        self.router.add_api_route("/set_time/{task_name}/{node_name}", self.set_time, methods=["POST"])
+        self.router.add_api_route("/get_xml", self.get_xml, methods=["GET"])
+        self.router.add_api_route("/save_xml", self.save_xml, methods=["POST"])
 
         self.task_data_list = task_data_list
 
         self.ros_master_uri = ros_master_uri
+
+    def get_xml(self, path: str):
+        p = Path(path)
+        if not p.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {path}")
+        if p.suffix.lower() != ".xml":
+            raise HTTPException(status_code=400, detail="Only .xml files are allowed")
+        return FileResponse(str(p), media_type="application/xml")
+
+    def save_xml(self, path: str, body: XmlSaveBody):
+        p = Path(path)
+        if p.suffix.lower() != ".xml":
+            raise HTTPException(status_code=400, detail="Only .xml files are allowed")
+        if not p.parent.exists():
+            raise HTTPException(status_code=400, detail=f"Directory not found: {p.parent}")
+        p.write_text(body.content, encoding="utf-8")
+        return {"saved": True, "path": str(p)}
 
     def set_time(self, task_name:str, node_name:str, body=Body(...)):
         self.task_data_list[task_name].programs[node_name].command.variables["start_time"]["default"] = int(body)
@@ -110,7 +134,7 @@ def run_fastapi(path, ros_master_uri="localhost"):
     hello = ErasersTaskControlServer("World", task_data_list, ros_master_uri)
     app.include_router(hello.router)
 
-    uvicorn.run(app, host="127.0.0.1", port=3001)
+    uvicorn.run(app, host="0.0.0.0", port=3001)
 
 # TODO: not smart
 def kill_fastapi():

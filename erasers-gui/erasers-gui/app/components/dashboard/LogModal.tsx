@@ -14,14 +14,14 @@ const style = {
     height: '80%'
 };
 
-export default function LogModal({ openModal }) {
+export default function LogModal({ openModal, serverIp = 'localhost' }) {
 
     const [log, setLog] = useState([]);
     const [connection, setConnection] = useState(null);
 
     const connectWebSocket = (taskName: string, nodeName: string) => {
         console.log(`LOG button clicked for ${nodeName}`);
-        const conn = new WebSocket(`ws://localhost:3001/ws/${taskName}/${nodeName}`);
+        const conn = new WebSocket(`ws://${serverIp}:3001/ws/${taskName}/${nodeName}`);
 
         conn.onopen = function (event) {
             console.log('get connected', event);
