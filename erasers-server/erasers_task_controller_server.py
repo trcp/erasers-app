@@ -5,9 +5,10 @@ import sys
 import logging
 import subprocess
 import json
+import threading
 from threading import Thread
 import tkinter as tk
-from tkinter import filedialog, ttk
+from tkinter import filedialog, ttk, messagebox
 from pathlib import Path
 
 import webbrowser
@@ -24,6 +25,7 @@ class XmlSaveBody(BaseModel):
 
 from parser import TaskData
 
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('uvicorn')
 
 class ErasersTaskControlServer:
@@ -44,15 +46,15 @@ class ErasersTaskControlServer:
         self.ros_master_uri = ros_master_uri
 
     def get_xml(self, path: str):
-        p = Path(path)
-        if not p.is_file():
-            raise HTTPException(status_code=404, detail=f"File not found: {path}")
+        p = Path(path).resolve()
         if p.suffix.lower() != ".xml":
             raise HTTPException(status_code=400, detail="Only .xml files are allowed")
+        if not p.is_file():
+            raise HTTPException(status_code=404, detail=f"File not found: {path}")
         return FileResponse(str(p), media_type="application/xml")
 
     def save_xml(self, path: str, body: XmlSaveBody):
-        p = Path(path)
+        p = Path(path).resolve()
         if p.suffix.lower() != ".xml":
             raise HTTPException(status_code=400, detail="Only .xml files are allowed")
         if not p.parent.exists():
@@ -60,39 +62,34 @@ class ErasersTaskControlServer:
         p.write_text(body.content, encoding="utf-8")
         return {"saved": True, "path": str(p)}
 
-    def set_time(self, task_name:str, node_name:str, body=Body(...)):
+    def set_time(self, task_name: str, node_name: str, body=Body(...)):
         self.task_data_list[task_name].programs[node_name].command.variables["start_time"]["default"] = int(body)
-        
-    def get_task(self):
-        # return [self.task_data_list[key].to_json() for key in self.task_data_list]
+        return {"set": True}
 
+    def get_task(self):
         for key in self.task_data_list:
-            print(self.task_data_list[key].to_json())
-        
+            logger.info(self.task_data_list[key].to_json())
+
         return {key: self.task_data_list[key].to_json() for key in self.task_data_list}
 
-    def run_task(self, task_name:str, node_name:str, body=Body(...)):
+    def run_task(self, task_name: str, node_name: str, body=Body(...)):
         self.task_data_list[task_name].programs[node_name].run(body, self.ros_master_uri)
         return {"run": True}
 
-    def task_running(self, task_name:str, node_name:str):
+    def task_running(self, task_name: str, node_name: str):
         node = self.task_data_list[task_name].programs[node_name]
         is_running = node.is_running()
-        # if "start_time" in node.command.variables:
-        #     unix_time = node.command.variables["start_time"]
-        #     return {"is_running": is_running, "start_time": unix_time}
-        # else:
         return {"is_running": is_running}
 
-    def kill_task(self, task_name:str, node_name:str):
+    def kill_task(self, task_name: str, node_name: str):
         node = self.task_data_list[task_name].programs[node_name]
         if node.is_running():
             self.task_data_list[task_name].programs[node_name].kill()
 
         return {"run": True}
 
-    async def websocket_endpoint(self, websocket: WebSocket, task_name:str, node_name:str):
-        print("ws", task_name, node_name)
+    async def websocket_endpoint(self, websocket: WebSocket, task_name: str, node_name: str):
+        logger.info(f"ws {task_name} {node_name}")
         await websocket.accept()
 
         node = self.task_data_list[task_name].programs[node_name]
@@ -101,28 +98,25 @@ class ErasersTaskControlServer:
             with open(log_file, "r") as f:
                 while node.is_running():
                     try:
-                        # l = f.readlines()[-1]
                         l = f.readline()
                         if l != "":
                             await websocket.send_text(l)
+                    except Exception as e:
+                        logger.debug(f"WebSocket read end: {e}")
+                        break
 
-                    except:
-                        print("last line")
-
-                    # await asyncio.sleep(0.1)
 
 def run_fastapi(path, ros_master_uri="localhost"):
-    app = FastAPI()
-
-    print("run fastapi")
+    logger.info("run fastapi")
 
     yaml_path = [os.path.join(path, i) for i in os.listdir(path) if i.endswith(".yaml")]
     task_data_list = {}
-    for path in yaml_path:
-        task_data = TaskData(path)
+    for p in yaml_path:
+        task_data = TaskData(p)
         task_name = task_data.task_name
         task_data_list[task_name] = task_data
 
+    app = FastAPI()
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -136,100 +130,122 @@ def run_fastapi(path, ros_master_uri="localhost"):
 
     uvicorn.run(app, host="0.0.0.0", port=3001)
 
-# TODO: not smart
+
 def kill_fastapi():
     import signal
-    print(os.getpid())
+    logger.info(f"killing pid {os.getpid()}")
     os.kill(os.getpid(), signal.SIGINT)
 
 
-def run_tkinter():
-    print("run tkinter")
+def run_tkinter(start_event, app_state):
+    logger.info("run tkinter")
     root = tk.Tk()
     root.title("erasers-app")
-    root.geometry("400x200")
+    root.geometry("400x280")
+    root.resizable(True, True)
 
+    # --- Folder selection ---
     def open_folder_dialog():
-        global config_path
         folder_path = filedialog.askdirectory()
-        config_path = folder_path
-        if folder_path:
-            path_label.config(text=f"{folder_path}")
+        if not folder_path:
+            return
+        yaml_files = [f for f in os.listdir(folder_path) if f.endswith(".yaml")]
+        if len(yaml_files) == 0:
+            path_label.config(text=f"path: {folder_path}", fg="red")
+            yaml_status_label.config(text="No YAML files found", fg="red")
+            app_state["config_path"] = None
+            run_button.config(state=tk.DISABLED)
         else:
-            path_label.config(text="No folder selected")
+            path_label.config(text=f"path: {folder_path}", fg="black")
+            yaml_status_label.config(text=f"{len(yaml_files)} tasks found", fg="green")
+            app_state["config_path"] = folder_path
+            run_button.config(state=tk.NORMAL)
 
     open_button = tk.Button(root, text="Open Folder", command=open_folder_dialog)
     open_button.pack(pady=5)
-    path_label = tk.Label(root, text="path: ")
-    path_label.pack(pady=5)
+    path_label = tk.Label(root, text="path: (none selected)")
+    path_label.pack(pady=2)
+    yaml_status_label = tk.Label(root, text="")
+    yaml_status_label.pack(pady=2)
 
-
+    # --- ROS Master URI ---
     def on_combobox_selected(event):
-        global ros_master_uri
-        selected_item = combobox.get()
-        ros_master_uri = selected_item
-        label.config(text=f"Selected: {selected_item}") 
+        app_state["ros_master_uri"] = combobox.get()
 
     options = ["hsrb80", "hsrb33", "localhost"]
-    combobox = ttk.Combobox(root, values=options)
-    combobox.pack(pady=1)
+    uri_frame = tk.Frame(root)
+    uri_frame.pack(pady=5)
+    tk.Label(uri_frame, text="ROS Master URI:").pack(side=tk.LEFT)
+    combobox = ttk.Combobox(uri_frame, values=options, width=12)
+    combobox.pack(side=tk.LEFT, padx=4)
     combobox.set(options[0])
-    global ros_master_uri
-    ros_master_uri = options[0]
-    label = tk.Label(root, text="Selected: ")
-    label.pack(pady=1)
+    app_state["ros_master_uri"] = options[0]
     combobox.bind("<<ComboboxSelected>>", on_combobox_selected)
 
+    # --- Buttons ---
     button_frame = tk.Frame(root)
-    button_frame.pack(side=tk.TOP)
+    button_frame.pack(pady=5)
 
     def run_server():
-        global enable_server
-        enable_server = True
-    run_button = tk.Button(button_frame, text="RUN", command=run_server)
+        config_path = app_state.get("config_path")
+        ros_master_uri = app_state.get("ros_master_uri")
+        if not config_path:
+            messagebox.showerror("Error", "Please select a valid config folder first.")
+            return
+        status_label.config(text="\u27f3 Starting...", fg="orange")
+        run_button.config(state=tk.DISABLED)
+
+        def _start():
+            try:
+                start_event.set()
+                run_fastapi(config_path, ros_master_uri=ros_master_uri)
+            except Exception as e:
+                logger.error(f"FastAPI error: {e}")
+                root.after(0, lambda: status_label.config(text=f"Error: {e}", fg="red"))
+
+        def _set_running():
+            status_label.config(text="\u2713 Running at http://0.0.0.0:3001", fg="green")
+
+        Thread(target=_start, daemon=True).start()
+        root.after(1500, _set_running)
+
+    run_button = tk.Button(button_frame, text="RUN", command=run_server, state=tk.DISABLED)
     run_button.pack(pady=1, side=tk.LEFT)
 
     def open_browser():
+        ros_master_uri = app_state.get("ros_master_uri", "localhost")
         if ros_master_uri == "hsrb80":
             webbrowser.open('http://hsrb80.local:3000/dashboard')
         elif ros_master_uri == "hsrb33":
             webbrowser.open('http://hsrb33.local:3000/dashboard')
-        elif ros_master_uri == "localhost":
+        else:
             webbrowser.open('http://localhost:3000/dashboard')
 
     task_button = tk.Button(button_frame, text="Open task starter", command=open_browser)
     task_button.pack(pady=1, side=tk.LEFT)
-    
+
     def all_quit():
         kill_fastapi()
         root.destroy()
+
     quit_button = tk.Button(button_frame, text="Quit", command=all_quit)
     quit_button.pack(pady=1, side=tk.LEFT)
 
-    button_frame.pack_configure(anchor=tk.CENTER)
+    # --- Status label ---
+    status_label = tk.Label(root, text="\u25cf Stopped", fg="gray")
+    status_label.pack(pady=8)
 
     root.mainloop()
 
-if __name__ == "__main__":
-    print("start")
 
-    config_path = None
-    enable_server = False
-    ros_master_uri = None
-    
-    tkinter_thread = Thread(target=run_tkinter)
+if __name__ == "__main__":
+    logger.info("start")
+
+    start_event = threading.Event()
+    app_state = {"config_path": None, "ros_master_uri": None}
+
+    tkinter_thread = Thread(target=run_tkinter, args=(start_event, app_state), daemon=True)
     tkinter_thread.start()
 
-    import time
-    while not enable_server:
-        print('waiting for run {}, {}'.format(config_path, ros_master_uri))
-        time.sleep(0.5)
-        if not config_path:
-            continue
-        if not ros_master_uri:
-            continue
-
-    run_fastapi(config_path, ros_master_uri=ros_master_uri)
-
-    # fastapi_thread = Thread(target=run_fastapi)
-    # fastapi_thread.start()
+    # Block until RUN is pressed inside the GUI
+    tkinter_thread.join()
