@@ -55,8 +55,9 @@ class NodeData:
         print("-"*100)
 
         # settings for ros master uri
-        uri = {"hsrb80": "192.168.11.80", "hsrb33": "192.168.11.33", "localhost": "localhost"}
-        rm_uri = "http://{}:11311".format(uri[ros_master_uri])
+        uri_map = {"hsrb80": "192.168.11.80", "hsrb33": "192.168.11.33", "localhost": "localhost"}
+        host = uri_map.get(ros_master_uri, ros_master_uri)
+        rm_uri = "http://{}:11311".format(host)
         env = os.environ.copy()
         env["PYTHONUNBUFFERED"] = "1"
 

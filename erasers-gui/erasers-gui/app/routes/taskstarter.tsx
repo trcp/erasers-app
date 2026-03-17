@@ -12,15 +12,23 @@ import {
   FormControlLabel,
   LinearProgress,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Select,
+  MenuItem,
+  InputLabel,
+  FormControl,
 } from '@mui/material';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import ArticleIcon from '@mui/icons-material/Article';
 import RouterIcon from '@mui/icons-material/Router';
+import StorageIcon from '@mui/icons-material/Storage';
 
 import OptionVariables from '~/components/dashboard/OptionVariablesParser';
 import LogModal from '~/components/dashboard/LogModal';
 import AppLayout from '~/components/AppLayout';
+import { useRos } from '~/scripts/ros';
 
 const hostName = import.meta.env.VITE_MASTER_HOSTNAME;
 
@@ -45,9 +53,54 @@ function a11yProps(index: number) {
 
 export default function TaskStarter() {
 
+  const { hostname } = useRos();
+
   const [serverIp, setServerIp] = useState('localhost');
   const [serverIpInput, setServerIpInput] = useState('localhost');
   const [connectError, setConnectError] = useState('');
+
+  // --- Execution config ---
+  const [networkIf, setNetworkIf] = useState('');
+  const [networkIp, setNetworkIp] = useState('');
+  const [composePath, setComposePath] = useState('');
+  const [networkInterfaces, setNetworkInterfaces] = useState<{ name: string; ip: string }[]>([]);
+  const [nodeDockerMode, setNodeDockerMode] = useState<Record<string, Record<string, boolean>>>({});
+
+  const fetchExecutionConfig = async (ip: string) => {
+    const [cfgRes, nifRes] = await Promise.all([
+      fetch(`http://${ip}:3001/get_execution_config`, { cache: 'no-store' }),
+      fetch(`http://${ip}:3001/get_network_interfaces`, { cache: 'no-store' }),
+    ]);
+    const cfg = await cfgRes.json();
+    const nif = await nifRes.json();
+    const interfaces: { name: string; ip: string }[] = nif.interfaces ?? [];
+    setNetworkInterfaces(interfaces);
+    const currentNif = cfg.network_if ?? '';
+    setNetworkIf(currentNif);
+    setNetworkIp(interfaces.find((i) => i.name === currentNif)?.ip ?? '');
+    setComposePath(cfg.compose_path ?? '');
+  };
+
+  const applyExecutionConfig = async (ip: string, nif: string, cpath: string, rosMaster?: string) => {
+    await fetch(`http://${ip}:3001/set_execution_config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ network_if: nif, compose_path: cpath, ros_master_uri: rosMaster ?? hostname }),
+    });
+  };
+
+  const handleNodeDockerModeChange = async (taskName: string, nodeName: string, mode: 'local' | 'docker') => {
+    const dockerMode = mode === 'docker';
+    setNodeDockerMode((prev) => ({
+      ...prev,
+      [taskName]: { ...prev[taskName], [nodeName]: dockerMode },
+    }));
+    await fetch(`http://${serverIp}:3001/set_node_config/${taskName}/${nodeName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ docker_mode: dockerMode }),
+    });
+  };
 
   const getTask = async (ip: string) => {
     const response = await fetch(`http://${ip}:3001/get_task`, { cache: 'no-store' });
@@ -132,22 +185,28 @@ export default function TaskStarter() {
     setDebugChecked(checkboxLength);
 
     var runStatusDict: any = {};
+    var dockerModeDict: Record<string, Record<string, boolean>> = {};
     for (var task_k in tsData) {
       var K: any = {};
+      var D: Record<string, boolean> = {};
       for (var node_k in tsData[task_k].programs) {
         const res = await fetch(`http://${ip}:3001/task_running/${task_k}/${node_k}`, { cache: 'no-store' }).then(r => r.json());
         K[node_k] = res.is_running;
+        D[node_k] = tsData[task_k].programs[node_k].docker_mode ?? false;
       }
       runStatusDict[task_k] = K;
+      dockerModeDict[task_k] = D;
     }
     setRunStatus({ ...runStatusDict });
+    setNodeDockerMode(dockerModeDict);
     setTaskData(tsData);
   };
 
   const handleConnect = async () => {
     setConnectError('');
     try {
-      await loadTasks(serverIpInput);
+      await Promise.all([loadTasks(serverIpInput), fetchExecutionConfig(serverIpInput)]);
+      await applyExecutionConfig(serverIpInput, networkIf, composePath, hostname);
       setServerIp(serverIpInput);
     } catch {
       setConnectError(`サーバー (${serverIpInput}:3001) に接続できません。`);
@@ -155,8 +214,14 @@ export default function TaskStarter() {
   };
 
   useEffect(() => {
-    loadTasks('localhost').catch(() => {});
+    Promise.all([loadTasks('localhost'), fetchExecutionConfig('localhost')]).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (serverIp) {
+      applyExecutionConfig(serverIp, networkIf, composePath, hostname).catch(() => {});
+    }
+  }, [hostname]);
 
   const [tabValue, setTabValue] = useState(0);
   const handleChangeTaskTab = (_event: React.SyntheticEvent, newValue: number) => {
@@ -193,6 +258,44 @@ export default function TaskStarter() {
           {taskData && !connectError && (
             <Typography variant="body2" color="success.main">接続済み: {serverIp}:3001</Typography>
           )}
+        </Box>
+
+        {/* Execution config bar */}
+        <Box sx={{ px: 3, py: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', bgcolor: 'grey.50' }}>
+          <StorageIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+
+          <FormControl size="small" sx={{ minWidth: 130 }}>
+            <InputLabel>Network IF</InputLabel>
+            <Select
+              value={networkIf}
+              label="Network IF"
+              onChange={(e) => {
+                const selected = e.target.value;
+                setNetworkIf(selected);
+                setNetworkIp(networkInterfaces.find((i) => i.name === selected)?.ip ?? '');
+                applyExecutionConfig(serverIp, selected, composePath);
+              }}
+            >
+              {networkInterfaces.map((iface) => (
+                <MenuItem key={iface.name} value={iface.name}>{iface.name}</MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+          {networkIp && (
+            <Typography variant="body2" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+              {networkIp}
+            </Typography>
+          )}
+
+          <TextField
+            label="compose.yaml"
+            size="small"
+            value={composePath}
+            onChange={(e) => setComposePath(e.target.value)}
+            onBlur={() => applyExecutionConfig(serverIp, networkIf, composePath)}
+            onKeyDown={(e) => { if (e.key === 'Enter') applyExecutionConfig(serverIp, networkIf, composePath); }}
+            sx={{ minWidth: 260 }}
+          />
         </Box>
 
         <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -283,6 +386,18 @@ export default function TaskStarter() {
                               )}
                             </Box>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                              <ToggleButtonGroup
+                                value={nodeDockerMode[task_key]?.[node_key] ? 'docker' : 'local'}
+                                exclusive
+                                size="small"
+                                onChange={(_e, val) => {
+                                  if (!val) return;
+                                  handleNodeDockerModeChange(task_key, node_key, val);
+                                }}
+                              >
+                                <ToggleButton value="local">Local</ToggleButton>
+                                <ToggleButton value="docker">Docker</ToggleButton>
+                              </ToggleButtonGroup>
                               <FormControlLabel
                                 label="Debug"
                                 control={
