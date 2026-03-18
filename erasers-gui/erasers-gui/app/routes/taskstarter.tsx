@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -19,6 +19,8 @@ import {
   InputLabel,
   FormControl,
 } from '@mui/material';
+import Snackbar from '@mui/material/Snackbar';
+import Alert from '@mui/material/Alert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import ArticleIcon from '@mui/icons-material/Article';
@@ -71,6 +73,36 @@ export default function TaskStarter() {
     optionVariables, setOptionVariable,
   } = useTaskStarter();
 
+  const [crashAlert, setCrashAlert] = useState<{ taskDisplay: string; nodeDisplay: string; code: number } | null>(null);
+  const runStatusRef = useRef<any>(null);
+  useEffect(() => { runStatusRef.current = runStatus; }, [runStatus]);
+
+  useEffect(() => {
+    if (!serverIp || !taskData) return;
+    const id = setInterval(async () => {
+      const rs = runStatusRef.current;
+      if (!rs) return;
+      for (const tk of Object.keys(rs)) {
+        for (const nk of Object.keys(rs[tk])) {
+          if (!rs[tk][nk]) continue;
+          try {
+            const r = await fetch(`http://${serverIp}:3001/task_running/${tk}/${nk}`, { cache: 'no-store' });
+            const d = await r.json();
+            if (!d.is_running) {
+              setRunStatus((prev: any) => ({ ...prev, [tk]: { ...prev[tk], [nk]: false } }));
+              if (d.exit_code !== null && d.exit_code !== 0) {
+                const taskDisp = taskData[tk]?.task?.display_name ?? tk;
+                const nodeDisp = taskData[tk]?.programs?.[nk]?.display_name ?? nk;
+                setCrashAlert({ taskDisplay: taskDisp, nodeDisplay: nodeDisp, code: d.exit_code });
+              }
+            }
+          } catch {}
+        }
+      }
+    }, 3000);
+    return () => clearInterval(id);
+  }, [serverIp, taskData]);
+
   const fetchExecutionConfig = async (ip: string) => {
     const [cfgRes, nifRes] = await Promise.all([
       fetch(`http://${ip}:3001/get_execution_config`, { cache: 'no-store' }),
@@ -83,6 +115,7 @@ export default function TaskStarter() {
     const currentNif = cfg.network_if ?? '';
     setNetworkIf(currentNif);
     setNetworkIp(interfaces.find((i) => i.name === currentNif)?.ip ?? '');
+    return currentNif;
   };
 
   const applyExecutionConfig = async (ip: string, nif: string, rosMaster?: string) => {
@@ -222,8 +255,8 @@ export default function TaskStarter() {
   const handleConnect = async () => {
     setConnectError('');
     try {
-      await Promise.all([loadTasks(serverIpInput), fetchExecutionConfig(serverIpInput)]);
-      await applyExecutionConfig(serverIpInput, networkIf, hostname);
+      const [, fetchedNif] = await Promise.all([loadTasks(serverIpInput), fetchExecutionConfig(serverIpInput)]);
+      await applyExecutionConfig(serverIpInput, fetchedNif, hostname);
       setServerIp(serverIpInput);
     } catch {
       setConnectError(`サーバー (${serverIpInput}:3001) に接続できません。`);
@@ -249,6 +282,16 @@ export default function TaskStarter() {
   return (
     <AppLayout>
       <LogModal openModal={openLogModal} serverIp={serverIp} />
+      <Snackbar
+        open={!!crashAlert}
+        autoHideDuration={8000}
+        onClose={() => setCrashAlert(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert severity="error" onClose={() => setCrashAlert(null)} sx={{ width: '100%' }}>
+          {crashAlert && `${crashAlert.nodeDisplay}（${crashAlert.taskDisplay}）がエラー終了しました (exit code: ${crashAlert.code})`}
+        </Alert>
+      </Snackbar>
 
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header */}
@@ -330,7 +373,7 @@ export default function TaskStarter() {
                     {taskData[task_key].task.description}
                   </Typography>
                   <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
-                    <Button variant="contained" color="success" startIcon={<PlayArrowIcon />}>
+                    <Button variant="contained" color="success" startIcon={<PlayArrowIcon />} disabled={!networkIf}>
                       RUN ALL
                     </Button>
                     <Button variant="outlined" color="error" startIcon={<StopIcon />}>
@@ -437,6 +480,7 @@ export default function TaskStarter() {
                                 color="success"
                                 size="small"
                                 startIcon={<PlayArrowIcon />}
+                                disabled={!networkIf}
                                 onClick={() => handleRunButtonClick(task_key, node_key, debugChecked[task_index][node_index], optionVariables)}
                               >
                                 RUN

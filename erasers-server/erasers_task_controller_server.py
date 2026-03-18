@@ -100,7 +100,8 @@ class ErasersTaskControlServer:
     def task_running(self, task_name: str, node_name: str):
         node = self.task_data_list[task_name].programs[node_name]
         is_running = node.is_running()
-        return {"is_running": is_running}
+        exit_code = node.get_exit_code()
+        return {"is_running": is_running, "exit_code": exit_code}
 
     def kill_task(self, task_name: str, node_name: str):
         node = self.task_data_list[task_name].programs[node_name]

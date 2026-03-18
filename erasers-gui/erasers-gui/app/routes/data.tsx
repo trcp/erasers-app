@@ -13,7 +13,7 @@ import ROSLIB from 'roslib';
 import { useRos } from '~/scripts/ros';
 
 const topicMeta = {
-  batteryState: { label: 'Battery State', topic: '/hsrb/battery_states', icon: <BatteryChargingFullIcon /> },
+  batteryState: { label: 'Battery State', topic: '/hsrb/battery_state', icon: <BatteryChargingFullIcon /> },
   jointState: { label: 'Joint States', topic: '/hsrb/joint_states', icon: <DeviceHubIcon /> },
   pose2D: { label: 'Pose 2D', topic: '/hsrb/pose2D', icon: <MyLocationIcon /> },
   wristWrench: { label: 'Wrist Wrench', topic: '/hsrb/wrist_wrench/raw', icon: <FitnessCenterIcon /> },
@@ -57,7 +57,7 @@ export default function DataViewer() {
   useEffect(() => {
     if (!ros) return;
 
-    const batteryStateSub = new ROSLIB.Topic({ ros, name: '/hsrb/battery_states', messageType: 'tmc_msgs/BatteryState' });
+    const batteryStateSub = new ROSLIB.Topic({ ros, name: '/hsrb/battery_state', messageType: 'tmc_msgs/BatteryState' });
     batteryStateSub.subscribe(message => {
       if (stopData["batteryState"] != true) {
         var element = (

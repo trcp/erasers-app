@@ -102,26 +102,8 @@ async function jsonToXml(json_obj) {
     return `<?xml version="1.0" encoding="UTF-8"?>\n${objToXml(rootTag as string, rootVal)}`;
 }
 
-const MAP_TOPIC_CANDIDATES = [
-    '/map',
-    '/move_base/global_costmap/costmap',
-    '/move_base/local_costmap/costmap',
-    '/projected_map',
-];
-
-const POSE_TOPIC_CANDIDATES = [
-    '/hsrb/pose2D',
-    '/robot_pose',
-    '/amcl_pose',
-];
-
-interface MapInfo {
-    width: number;
-    height: number;
-    resolution: number;
-    originX: number;
-    originY: number;
-}
+const MAP_MSG_TYPE = 'nav_msgs/OccupancyGrid';
+const POSE_MSG_TYPE = 'geometry_msgs/Pose2D';
 
 export default function MapCreator() {
 
@@ -283,9 +265,46 @@ export default function MapCreator() {
     const [robotPose, setRobotPose] = useState<any>();
     const robotPoseSubRef = useRef<ROSLIB.Topic | null>(null);
 
+    const [mapTopicCandidates, setMapTopicCandidates] = useState<string[]>([]);
+    const [poseTopicCandidates, setPoseTopicCandidates] = useState<string[]>([]);
+
+    // ── Map View state ───────────────────────────────────────────────────────
+    const viewerDivRef = useRef<HTMLDivElement>(null);
+    const ros2dViewerRef = useRef<any>(null);
+    const robotMarkerRef = useRef<any>(null);
+    const [hasMap, setHasMap] = useState(false);
+    const [mapStatus, setMapStatus] = useState('Waiting for map...');
+
+    const [mapTopicInput, setMapTopicInput] = useState('');
+    const [poseTopicInput, setPoseTopicInput] = useState('');
+    const [activeMaptopic, setActiveMaptopic] = useState('');
+    const [activePoseTopic, setActivePoseTopic] = useState('');
+
+    useEffect(() => {
+        if (!ros) return;
+        ros.getTopics(
+            (result: { topics: string[]; types: string[] }) => {
+                const mapOpts: string[] = [];
+                const poseOpts: string[] = [];
+                result.topics.forEach((topic, i) => {
+                    if (result.types[i] === MAP_MSG_TYPE) mapOpts.push(topic);
+                    if (result.types[i] === POSE_MSG_TYPE) poseOpts.push(topic);
+                });
+                console.log('[MapCreator] All topics:', result.topics.map((t, i) => `${t} (${result.types[i]})`));
+                console.log('[MapCreator] Map topic candidates:', mapOpts);
+                console.log('[MapCreator] Pose topic candidates:', poseOpts);
+                setMapTopicCandidates(mapOpts);
+                setPoseTopicCandidates(poseOpts);
+                if (mapOpts.length > 0) setMapTopicInput(mapOpts[0]);
+                if (poseOpts.length > 0) setPoseTopicInput(poseOpts[0]);
+            },
+            (error: any) => console.error('getTopics error:', error)
+        );
+    }, [ros]);
+
     useEffect(() => {
         if (!connectRos || !ros) return;
-        robotPoseSubRef.current = new ROSLIB.Topic({ ros, name: '/hsrb/pose2D', messageType: 'geometry_msgs/Pose2D' });
+        robotPoseSubRef.current = new ROSLIB.Topic({ ros, name: poseTopicInput, messageType: POSE_MSG_TYPE });
         robotPoseSubRef.current.subscribe(message => {
             setRobotPose(message);
         });
@@ -295,7 +314,7 @@ export default function MapCreator() {
                 robotPoseSubRef.current = null;
             }
         };
-    }, [connectRos, ros]);
+    }, [connectRos, ros, poseTopicInput]);
 
     useEffect(() => {
         if (fileContent) {
@@ -311,102 +330,153 @@ export default function MapCreator() {
         }
     }, [fileContent]);
 
-    // ── Map View state ───────────────────────────────────────────────────────
-    const mapCanvasRef = useRef<HTMLCanvasElement>(null);
-    const robotCanvasRef = useRef<HTMLCanvasElement>(null);
-    const mapInfoRef = useRef<MapInfo | null>(null);
-    const [hasMap, setHasMap] = useState(false);
-    const [mapStatus, setMapStatus] = useState('Waiting for map...');
-
-    const [mapTopicInput, setMapTopicInput] = useState('/map');
-    const [poseTopicInput, setPoseTopicInput] = useState('/hsrb/pose2D');
-    const [activeMaptopic, setActiveMaptopic] = useState('/map');
-    const [activePoseTopic, setActivePoseTopic] = useState('/hsrb/pose2D');
-
     const handleSubscribe = () => {
-        setActiveMaptopic(mapTopicInput.trim() || '/map');
-        setActivePoseTopic(poseTopicInput.trim() || '/hsrb/pose2D');
+        setActiveMaptopic(mapTopicInput.trim());
+        setActivePoseTopic(poseTopicInput.trim());
     };
 
     useEffect(() => {
-        if (!ros) return;
+        if (!ros || !activeMaptopic || !viewerDivRef.current) return;
+        const ROS2D = (window as any).ROS2D;
+        if (!ROS2D) return;
 
-        const mapSub = new ROSLIB.Topic({ ros, name: activeMaptopic, messageType: 'nav_msgs/OccupancyGrid' });
+        const container = viewerDivRef.current;
+        const viewer = new ROS2D.Viewer({
+            divID: container.id,
+            width: container.clientWidth || 800,
+            height: container.clientHeight || 600,
+        });
+        ros2dViewerRef.current = viewer;
+
+        // Robot marker (in ROS world coords = meters; scene transform scales it automatically)
+        const createjs = (window as any).createjs;
+        if (createjs) {
+            const marker = new createjs.Container();
+            const circle = new createjs.Shape();
+            circle.graphics.beginFill('rgba(220,50,50,0.85)').drawCircle(0, 0, 0.3);
+            const arrow = new createjs.Shape();
+            arrow.graphics.setStrokeStyle(0.08).beginStroke('#FFD700').moveTo(0, 0).lineTo(0.7, 0);
+            marker.addChild(circle, arrow);
+            viewer.scene.addChild(marker);
+            robotMarkerRef.current = marker;
+        }
+
+        // Subscribe manually to access raw data for obstacle bounding box cropping
+        let currentGrid: any = null;
+        const mapSub = new ROSLIB.Topic({ ros, name: activeMaptopic, messageType: MAP_MSG_TYPE });
         mapSub.subscribe((message: any) => {
             const { width, height, resolution } = message.info;
-            const originX: number = message.info.origin.position.x;
-            const originY: number = message.info.origin.position.y;
-            mapInfoRef.current = { width, height, resolution, originX, originY };
-            setMapStatus(`${activeMaptopic}  |  ${width}×${height} cells, ${resolution}m/cell`);
-            setHasMap(true);
-
-            const canvas = mapCanvasRef.current;
-            if (!canvas) return;
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-
-            const imgData = ctx.createImageData(width, height);
+            const poseX: number = message.info.origin.position.x;
+            const poseY: number = message.info.origin.position.y;
             const data: number[] = message.data;
-            for (let i = 0; i < data.length; i++) {
-                const val = data[i];
-                let r: number, g: number, b: number;
-                if (val === -1) {
-                    r = 180; g = 180; b = 180;
-                } else if (val === 0) {
-                    r = 255; g = 255; b = 255;
-                } else {
-                    const intensity = Math.round((1 - val / 100) * 200);
-                    r = intensity; g = intensity; b = intensity;
+
+            // Find bounding box of obstacle cells (value > 0) in data coordinates
+            // ROS OccupancyGrid: row 0 = bottom of map (min Y), row height-1 = top (max Y)
+            let minRow = height, maxRow = -1, minCol = width, maxCol = -1;
+            for (let row = 0; row < height; row++) {
+                for (let col = 0; col < width; col++) {
+                    if (data[col + row * width] > 0) {
+                        if (row < minRow) minRow = row;
+                        if (row > maxRow) maxRow = row;
+                        if (col < minCol) minCol = col;
+                        if (col > maxCol) maxCol = col;
+                    }
                 }
-                imgData.data[i * 4]     = r;
-                imgData.data[i * 4 + 1] = g;
-                imgData.data[i * 4 + 2] = b;
-                imgData.data[i * 4 + 3] = 255;
             }
-            ctx.putImageData(imgData, 0, 0);
+            // Fallback to full map if no obstacles found
+            if (maxRow === -1) { minRow = 0; maxRow = height - 1; minCol = 0; maxCol = width - 1; }
+
+            // Add padding cells
+            const pad = 20;
+            minRow = Math.max(0, minRow - pad);
+            maxRow = Math.min(height - 1, maxRow + pad);
+            minCol = Math.max(0, minCol - pad);
+            maxCol = Math.min(width - 1, maxCol + pad);
+
+            // Convert bounding box to ROS2D scene coordinates (meters, Y-flipped)
+            // ros2d OccupancyGrid places bitmap row 0 at scene_y = -height_m - poseY
+            // scene_y for data row dr = -poseY - (dr + 1) * resolution  (bottom edge of cell)
+            // Bounding box: data rows [minRow..maxRow], data cols [minCol..maxCol]
+            const bbXMin = poseX + minCol * resolution;
+            const bbXMax = poseX + (maxCol + 1) * resolution;
+            const bbYMin = -poseY - (maxRow + 1) * resolution; // top in scene (more negative = higher on canvas)
+            const bbYMax = -poseY - minRow * resolution;        // bottom in scene
+            const bbW = bbXMax - bbXMin;
+            const bbH = bbYMax - bbYMin;
+
+            // Uniform scale + center bounding box in canvas
+            const scale = Math.min(viewer.width / bbW, viewer.height / bbH);
+            viewer.scene.scaleX = scale;
+            viewer.scene.scaleY = scale;
+            viewer.scene.x = (viewer.width - bbW * scale) / 2 - bbXMin * scale;
+            viewer.scene.y = (viewer.height - bbH * scale) / 2 - bbYMin * scale;
+
+            // Swap in new OccupancyGrid bitmap
+            if (currentGrid) viewer.scene.removeChild(currentGrid);
+            currentGrid = new ROS2D.OccupancyGrid({ message });
+            viewer.scene.addChildAt(currentGrid, 0);
+
+            mapSub.unsubscribe();
+            setHasMap(true);
+            setMapStatus(`${activeMaptopic} | ${bbW.toFixed(1)}×${bbH.toFixed(1)} m`);
         });
 
-        const poseSub = new ROSLIB.Topic({ ros, name: activePoseTopic, messageType: 'geometry_msgs/Pose2D' });
-        poseSub.subscribe((message: any) => {
-            const info = mapInfoRef.current;
-            if (!info) return;
-            const canvas = robotCanvasRef.current;
-            if (!canvas) return;
-            canvas.width = info.width;
-            canvas.height = info.height;
-            const ctx = canvas.getContext('2d');
-            if (!ctx) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Zoom (mouse wheel) and pan (drag)
+        const canvas = container.querySelector('canvas');
+        const abortCtrl = new AbortController();
+        const sig = { signal: abortCtrl.signal };
+        if (canvas) {
+            const zoomView = new ROS2D.ZoomView({ rootObject: viewer.scene });
+            const panView = new ROS2D.PanView({ rootObject: viewer.scene });
+            let isPanning = false;
 
-            const cx = (message.x - info.originX) / info.resolution;
-            const cy = info.height - (message.y - info.originY) / info.resolution;
-            const theta: number = message.theta;
-            const r = Math.max(4, Math.round(0.25 / info.resolution));
-            const arrowLen = Math.max(8, Math.round(0.5 / info.resolution));
+            canvas.addEventListener('wheel', (e: WheelEvent) => {
+                e.preventDefault();
+                const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+                const rect = (canvas as HTMLCanvasElement).getBoundingClientRect();
+                zoomView.startZoom(e.clientX - rect.left, e.clientY - rect.top);
+                zoomView.zoom(factor);
+            }, { ...sig, passive: false });
 
-            ctx.beginPath();
-            ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-            ctx.fillStyle = 'rgba(220, 50, 50, 0.85)';
-            ctx.fill();
-            ctx.strokeStyle = 'white';
-            ctx.lineWidth = Math.max(1, r * 0.3);
-            ctx.stroke();
-
-            ctx.beginPath();
-            ctx.moveTo(cx, cy);
-            ctx.lineTo(cx + arrowLen * Math.cos(theta), cy - arrowLen * Math.sin(theta));
-            ctx.strokeStyle = '#FFD700';
-            ctx.lineWidth = Math.max(1, r * 0.4);
-            ctx.stroke();
-        });
+            canvas.addEventListener('mousedown', (e: MouseEvent) => {
+                isPanning = true;
+                panView.startPan(e.clientX, e.clientY);
+            }, sig);
+            canvas.addEventListener('mousemove', (e: MouseEvent) => {
+                if (!isPanning) return;
+                panView.pan(e.clientX, e.clientY);
+            }, sig);
+            canvas.addEventListener('mouseup', () => { isPanning = false; }, sig);
+            canvas.addEventListener('mouseleave', () => { isPanning = false; }, sig);
+        }
 
         return () => {
             mapSub.unsubscribe();
-            poseSub.unsubscribe();
+            abortCtrl.abort();
+            const marker = robotMarkerRef.current;
+            if (marker?.parent) marker.parent.removeChild(marker);
+            container.querySelector('canvas')?.remove();
+            ros2dViewerRef.current = null;
+            robotMarkerRef.current = null;
+            setHasMap(false);
+            setMapStatus('Waiting for map...');
         };
-    }, [ros, activeMaptopic, activePoseTopic]);
+    }, [ros, activeMaptopic]);
+
+    useEffect(() => {
+        if (!ros || !activePoseTopic) return;
+        const poseSub = new ROSLIB.Topic({ ros, name: activePoseTopic, messageType: POSE_MSG_TYPE });
+        poseSub.subscribe((message: any) => {
+            const marker = robotMarkerRef.current;
+            if (!marker) return;
+            // Marker is a child of viewer.scene, so position in ROS world coords (meters).
+            // EaselJS applies the scene transform (scale + offset) automatically.
+            marker.x = message.x;
+            marker.y = -message.y;  // Y-flip: ROS Y-up → canvas Y-down
+            marker.rotation = -message.theta * (180 / Math.PI);
+        });
+        return () => poseSub.unsubscribe();
+    }, [ros, activePoseTopic]);
 
     return (
         <AppLayout>
@@ -585,16 +655,19 @@ export default function MapCreator() {
                                 sx={{ minWidth: 260 }}
                             />
                             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                                {MAP_TOPIC_CANDIDATES.map(t => (
-                                    <Chip
-                                        key={t}
-                                        label={t}
-                                        size="small"
-                                        variant={mapTopicInput === t ? 'filled' : 'outlined'}
-                                        color={mapTopicInput === t ? 'primary' : 'default'}
-                                        onClick={() => setMapTopicInput(t)}
-                                    />
-                                ))}
+                                {mapTopicCandidates.length === 0
+                                    ? <Typography variant="caption" color="text.secondary">No {MAP_MSG_TYPE} topics found</Typography>
+                                    : mapTopicCandidates.map(t => (
+                                        <Chip
+                                            key={t}
+                                            label={t}
+                                            size="small"
+                                            variant={mapTopicInput === t ? 'filled' : 'outlined'}
+                                            color={mapTopicInput === t ? 'primary' : 'default'}
+                                            onClick={() => setMapTopicInput(t)}
+                                        />
+                                    ))
+                                }
                             </Box>
                         </Box>
 
@@ -607,16 +680,19 @@ export default function MapCreator() {
                                 sx={{ minWidth: 220 }}
                             />
                             <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                                {POSE_TOPIC_CANDIDATES.map(t => (
-                                    <Chip
-                                        key={t}
-                                        label={t}
-                                        size="small"
-                                        variant={poseTopicInput === t ? 'filled' : 'outlined'}
-                                        color={poseTopicInput === t ? 'primary' : 'default'}
-                                        onClick={() => setPoseTopicInput(t)}
-                                    />
-                                ))}
+                                {poseTopicCandidates.length === 0
+                                    ? <Typography variant="caption" color="text.secondary">No {POSE_MSG_TYPE} topics found</Typography>
+                                    : poseTopicCandidates.map(t => (
+                                        <Chip
+                                            key={t}
+                                            label={t}
+                                            size="small"
+                                            variant={poseTopicInput === t ? 'filled' : 'outlined'}
+                                            color={poseTopicInput === t ? 'primary' : 'default'}
+                                            onClick={() => setPoseTopicInput(t)}
+                                        />
+                                    ))
+                                }
                             </Box>
                         </Box>
 
@@ -634,28 +710,17 @@ export default function MapCreator() {
                     </Paper>
 
                     {/* Canvas area */}
-                    <Box sx={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', p: 2, bgcolor: '#f5f5f5' }}>
-                        {hasMap ? (
-                            <Box sx={{ position: 'relative', display: 'inline-block', boxShadow: 3 }}>
-                                <canvas
-                                    ref={mapCanvasRef}
-                                    style={{ display: 'block', imageRendering: 'pixelated', maxWidth: '100%', maxHeight: 'calc(100vh - 260px)' }}
-                                />
-                                <canvas
-                                    ref={robotCanvasRef}
-                                    style={{
-                                        position: 'absolute',
-                                        top: 0,
-                                        left: 0,
-                                        width: '100%',
-                                        height: '100%',
-                                        imageRendering: 'pixelated',
-                                    }}
-                                />
-                            </Box>
-                        ) : (
-                            <Typography color="text.secondary">{mapStatus}</Typography>
+                    <Box sx={{ flex: 1, overflow: 'hidden', position: 'relative', bgcolor: '#f5f5f5' }}>
+                        {!hasMap && (
+                            <Typography color="text.secondary" sx={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', zIndex: 1 }}>
+                                {mapStatus}
+                            </Typography>
                         )}
+                        <div
+                            id="ros2d-map-viewer"
+                            ref={viewerDivRef}
+                            style={{ width: '100%', height: '100%' }}
+                        />
                     </Box>
                 </Box>
             </Box>

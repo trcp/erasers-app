@@ -1,3 +1,18 @@
+declare module 'ros2d' {
+  class Viewer {
+    constructor(options: { divID: string; width: number; height: number });
+    scene: any;
+    scaleToDimensions(width: number, height: number): void;
+    shift(x: number, y: number): void;
+  }
+  class OccupancyGridClient {
+    constructor(options: { ros: any; topic: string; rootObject: any; continuous?: boolean });
+    currentGrid: any;
+    on(event: 'change', cb: () => void): void;
+  }
+  export { Viewer, OccupancyGridClient };
+}
+
 declare module 'roslib' {
   export = ROSLIB;
 }

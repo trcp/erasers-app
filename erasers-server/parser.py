@@ -46,6 +46,7 @@ class NodeData:
         self.docker_mode = False
         self.network_if = "wlo1"
         self.compose_path = ""
+        self.container_id = None
 
     def build_cmd(self, template, ros_master_uri, opt):
         print("-"*100)
@@ -72,7 +73,7 @@ class NodeData:
             display = os.environ.get("DISPLAY", ":0")
             cmd = [
                 "docker", "compose", "-f", os.path.expanduser(self.compose_path),
-                "run", "--rm",
+                "run", "--rm", "-d", "-q",
                 "-e", f"NETWORK_IF={self.network_if}",
                 "-e", f"ROS_MASTER_URI={rm_uri}",
                 "-e", f"ROS_IP={ros_ip}",
@@ -99,8 +100,11 @@ class NodeData:
         cmd, my_env = self.build_cmd(self.command.template, ros_master_uri, body)
 
         if self.proc is not None:
-            print("already running")
-            return None
+            if self.proc.poll() is None:
+                print("already running")
+                return None
+            else:
+                self.proc = None
 
         t = time.localtime()
         txt_name = "{}_{}_{}_{}_{}_{}_{}.log.txt".format(self.node_name, t.tm_year,
@@ -119,33 +123,52 @@ class NodeData:
         
         self.log_file_name = os.path.join(erasers_log_dir, txt_name)
         self.log_file = open(self.log_file_name, "w")
-        # self.proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        self.proc = subprocess.Popen(cmd, stdout=self.log_file, stderr=subprocess.STDOUT, env=my_env)
+        print(f"[run] $ {' '.join(cmd)}")
+
+        if self.docker_mode:
+            # Run detached and capture container ID from stdout
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            self.container_id = result.stdout.strip()
+            print(f"[run] container id: {self.container_id}")
+            # Follow container logs; proc exits when container stops
+            self.proc = subprocess.Popen(
+                ["docker", "logs", "-f", self.container_id],
+                stdout=self.log_file, stderr=subprocess.STDOUT
+            )
+        else:
+            self.proc = subprocess.Popen(cmd, stdout=self.log_file, stderr=subprocess.STDOUT, env=my_env)
 
         return self.proc
 
     def kill(self):
-        res = self.proc.terminate()
-        if self.command.kill != "":
-            print("kill program with special command", self.command.kill)
-            cmd = self.command.kill.split()
-            subprocess.Popen(cmd)
-        
-        # res = self.proc.kill()
-        self.proc = None
+        if self.docker_mode and self.container_id:
+            print(f"[kill] docker stop {self.container_id}")
+            subprocess.run(["docker", "stop", self.container_id], check=False)
+            self.container_id = None
 
-        return res
+        if self.proc is not None:
+            self.proc.terminate()
+
+        if self.command.kill != "":
+            cmd = self.command.kill.split()
+            print(f"[kill] $ {' '.join(cmd)}")
+            subprocess.Popen(cmd)
+
+        self.proc = None
 
     def get_log_file_path(self):
         return self.log_file_name
+
+    def get_exit_code(self):
+        if self.proc is None:
+            return None
+        return self.proc.poll()
 
     def is_running(self):
         if self.proc is not None:
             return self.proc.poll() is None
         else:
-          return False
-  
-        # return self.proc.poll() is None
+            return False
 
 class TaskData:
     def __init__(self, path, docker_mode=False, network_if="wlo1", compose_path=""):

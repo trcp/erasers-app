@@ -59,18 +59,18 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
 
   useEffect(() => {
     if (!ros) return;
-    const batterySub = new ROSLIB.Topic({ ros, name: '/hsrb/battery_states', messageType: 'tmc_msgs/BatteryState' });
+    const batterySub = new ROSLIB.Topic({ ros, name: '/hsrb/battery_state', messageType: 'tmc_msgs/BatteryState' });
     batterySub.subscribe((message: any) => {
-      const level = message?.charge_level ?? message?.percentage ?? null;
-      if (level !== null) setBatteryLevel(Math.round(Number(level) * 100));
+      const level = message?.power ?? null;
+      if (level !== null) setBatteryLevel(Math.round(Number(level)));
     });
     return () => batterySub.unsubscribe();
   }, [ros]);
 
   const handleEmergencyStop = () => {
     if (!ros) return;
-    const cmdVel = new ROSLIB.Topic({ ros, name: '/hsrb/command_velocity', messageType: 'geometry_msgs/Twist' });
-    cmdVel.publish(new ROSLIB.Message({ linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } }));
+    const runstop = new ROSLIB.Topic({ ros, name: '/hsrb/runstop_button', messageType: 'std_msgs/Bool' });
+    runstop.publish(new ROSLIB.Message({ data: true }));
   };
 
   const handleOpenDialog = () => {

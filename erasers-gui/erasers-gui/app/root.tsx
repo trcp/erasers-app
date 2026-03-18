@@ -83,6 +83,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </ThemeProvider>
         </CacheProvider>
         <ScrollRestoration />
+        <script src="/easeljs.js" />
+        <script src="/eventemitter2.js" />
+        <script src="/roslib.js" />
+        <script src="/ros2d.js" />
         <Scripts />
       </body>
     </html>
