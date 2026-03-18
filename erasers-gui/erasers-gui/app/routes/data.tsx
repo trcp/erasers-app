@@ -1,23 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Typography, Card, CardContent, Box, Button, Fab, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton } from '@mui/material';
+import { useEffect, useRef, useState } from 'react';
+import { Typography, Card, CardContent, Box, Button, Fab, Dialog, DialogTitle, DialogContent, DialogActions, TextField, IconButton, Autocomplete } from '@mui/material';
 import AppLayout from '~/components/AppLayout';
-import BatteryChargingFullIcon from '@mui/icons-material/BatteryChargingFull';
-import DeviceHubIcon from '@mui/icons-material/DeviceHub';
-import MyLocationIcon from '@mui/icons-material/MyLocation';
-import FitnessCenterIcon from '@mui/icons-material/FitnessCenter';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
 import TopicIcon from '@mui/icons-material/Topic';
 
 import ROSLIB from 'roslib';
 import { useRos } from '~/scripts/ros';
-
-const topicMeta = {
-  batteryState: { label: 'Battery State', topic: '/hsrb/battery_state', icon: <BatteryChargingFullIcon /> },
-  jointState: { label: 'Joint States', topic: '/hsrb/joint_states', icon: <DeviceHubIcon /> },
-  pose2D: { label: 'Pose 2D', topic: '/hsrb/pose2D', icon: <MyLocationIcon /> },
-  wristWrench: { label: 'Wrist Wrench', topic: '/hsrb/wrist_wrench/raw', icon: <FitnessCenterIcon /> },
-};
 
 type CustomTopic = {
   id: string;
@@ -26,153 +15,123 @@ type CustomTopic = {
   messageType: string;
 };
 
+
 const CUSTOM_TOPICS_KEY = 'data_viewer_custom_topics';
 
+function renderValue(value: unknown, depth = 0): React.ReactNode {
+  if (value === null || value === undefined) {
+    return <span style={{ color: 'gray' }}>—</span>;
+  }
+  if (typeof value === 'boolean') {
+    return <span style={{ color: value ? '#2e7d32' : '#c62828' }}>{String(value)}</span>;
+  }
+  if (typeof value === 'number') {
+    return <span style={{ float: 'right' }}>{value.toFixed(4)}</span>;
+  }
+  if (typeof value === 'string') {
+    return <span>{value}</span>;
+  }
+  if (Array.isArray(value)) {
+    const allNumbers = value.every(v => typeof v === 'number');
+    if (allNumbers) {
+      const nums = value as number[];
+      if (nums.length <= 20) {
+        return <span>{nums.map(n => n.toFixed(4)).join(', ')}</span>;
+      }
+      return <span>{nums.slice(0, 5).map(n => n.toFixed(4)).join(', ')} …{nums.length} items</span>;
+    }
+    return <span>{JSON.stringify(value)}</span>;
+  }
+  if (typeof value === 'object') {
+    return renderObject(value as Record<string, unknown>, depth);
+  }
+  return <span>{String(value)}</span>;
+}
+
+function renderObject(obj: Record<string, unknown>, depth = 0): React.ReactNode {
+  if (depth >= 3) {
+    return <span>{JSON.stringify(obj)}</span>;
+  }
+  return (
+    <>
+      {Object.entries(obj)
+        .filter(([key]) => key !== 'header')
+        .map(([key, val]) => {
+          if (val !== null && typeof val === 'object' && !Array.isArray(val)) {
+            return (
+              <Box key={key} sx={{ mt: depth === 0 ? 0.5 : 0.25 }}>
+                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.75rem', fontWeight: 700, color: 'text.secondary', letterSpacing: '0.05em', mt: 0.5 }}>
+                  {key.toUpperCase()}
+                </Typography>
+                <Box sx={{ pl: (depth + 1) * 1.5 }}>
+                  {renderObject(val as Record<string, unknown>, depth + 1)}
+                </Box>
+              </Box>
+            );
+          }
+          return (
+            <Box key={key} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25, gap: 1 }}>
+              <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'text.secondary', flexShrink: 0 }}>{key}</Typography>
+              <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem', textAlign: 'right' }}>
+                {renderValue(val, depth + 1)}
+              </Typography>
+            </Box>
+          );
+        })}
+    </>
+  );
+}
+
+function renderMessage(_ct: CustomTopic, message: any): React.ReactNode {
+  return (
+    <Box sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
+      {renderObject(message)}
+    </Box>
+  );
+}
+
 export default function DataViewer() {
-
-  const msg = { "batteryState": null, "jointState": null, "pose2D": null, "wristWrench": null };
-  const buttonState = { "batteryState": false, "jointState": false, "pose2D": false, "wristWrench": false };
-  const [jointState, setJointState] = useState(msg);
-  const [stopData, setStopData] = useState(buttonState);
-
-  const [customTopics, setCustomTopics] = useState<CustomTopic[]>(() => {
+  const [topics, setTopics] = useState<CustomTopic[]>(() => {
     try {
-      return JSON.parse(localStorage.getItem(CUSTOM_TOPICS_KEY) || '[]');
+      const saved = localStorage.getItem(CUSTOM_TOPICS_KEY);
+      return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });
-  const [customData, setCustomData] = useState<Record<string, React.ReactNode>>({});
-  const [customStopped, setCustomStopped] = useState<Record<string, boolean>>({});
+  const [topicData, setTopicData] = useState<Record<string, React.ReactNode>>({});
+  const [topicStopped, setTopicStopped] = useState<Record<string, boolean>>({});
+  const topicStoppedRef = useRef<Record<string, boolean>>({});
 
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [newLabel, setNewLabel] = useState('');
   const [newTopicName, setNewTopicName] = useState('');
   const [newMsgType, setNewMsgType] = useState('');
+  const [rosTopics, setRosTopics] = useState<{ topic: string; type: string }[]>([]);
 
   const { ros } = useRos();
 
+  // Keep ref in sync so subscribe callbacks always see current stopped state
   useEffect(() => {
-    localStorage.setItem(CUSTOM_TOPICS_KEY, JSON.stringify(customTopics));
-  }, [customTopics]);
+    topicStoppedRef.current = topicStopped;
+  }, [topicStopped]);
+
+  useEffect(() => {
+    localStorage.setItem(CUSTOM_TOPICS_KEY, JSON.stringify(topics));
+  }, [topics]);
 
   useEffect(() => {
     if (!ros) return;
 
-    const batteryStateSub = new ROSLIB.Topic({ ros, name: '/hsrb/battery_state', messageType: 'tmc_msgs/BatteryState' });
-    batteryStateSub.subscribe(message => {
-      if (stopData["batteryState"] != true) {
-        var element = (
-          <Box sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-            <div>{JSON.stringify(message, null, 2)}</div>
-          </Box>
-        );
-        jointState["batteryState"] = element;
-        setJointState({ ...jointState });
-      }
-    });
-
-    const jointStatesSub = new ROSLIB.Topic({ ros, name: '/hsrb/joint_states', messageType: 'sensor_msgs/JointState' });
-    jointStatesSub.subscribe(message => {
-      const name = message.name;
-      const position = message.position;
-      const velocity = message.velocity;
-      const effort = message.effort;
-      if (stopData["jointState"] != true) {
-        var element = (
-          <Box sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-            {name.map((_, index) => (
-              <Box key={index} sx={{ mb: 0.5 }}>
-                <Typography component="span" sx={{ fontWeight: 600, fontFamily: 'monospace', fontSize: '0.85rem' }}>
-                  {name[index]}:
-                </Typography>{' '}
-                {Math.round(position[index] * 1000) / 1000}, {Math.round(velocity[index] * 1000) / 1000}, {Math.round(effort[index] * 1000) / 1000}
-              </Box>
-            ))}
-          </Box>
-        );
-        jointState["jointState"] = element;
-        setJointState({ ...jointState });
-      }
-    });
-
-    const pose2DSub = new ROSLIB.Topic({ ros, name: '/hsrb/pose2D', messageType: 'geometry_msgs/Pose2D' });
-    pose2DSub.subscribe(message => {
-      if (stopData["pose2D"] != true) {
-        var element = (
-          <Box sx={{ fontFamily: 'monospace' }}>
-            {[['X', message.x], ['Y', message.y], ['θ', message.theta]].map(([label, val]) => (
-              <Box key={String(label)} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.9rem', color: 'text.secondary' }}>{label}</Typography>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '1.1rem', fontWeight: 600 }}>{Number(val).toFixed(4)}</Typography>
-              </Box>
-            ))}
-          </Box>
-        );
-        jointState["pose2D"] = element;
-        setJointState({ ...jointState });
-      }
-    });
-
-    const wristWrenchSub = new ROSLIB.Topic({ ros, name: '/hsrb/wrist_wrench/raw', messageType: 'geometry_msgs/WrenchStamped' });
-    wristWrenchSub.subscribe(message => {
-      const data = message.wrench;
-      if (stopData["wristWrench"] != true) {
-        var element = (
-          <Box sx={{ fontFamily: 'monospace' }}>
-            <Typography sx={{ fontWeight: 600, mb: 0.5, fontSize: '0.8rem', color: 'text.secondary' }}>FORCE</Typography>
-            {['x', 'y', 'z'].map(axis => (
-              <Box key={`f${axis}`} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'text.secondary' }}>{axis.toUpperCase()}</Typography>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 600 }}>{Number(data.force[axis]).toFixed(4)}</Typography>
-              </Box>
-            ))}
-            <Typography sx={{ fontWeight: 600, mt: 1, mb: 0.5, fontSize: '0.8rem', color: 'text.secondary' }}>TORQUE</Typography>
-            {['x', 'y', 'z'].map(axis => (
-              <Box key={`t${axis}`} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.25 }}>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '0.85rem', color: 'text.secondary' }}>{axis.toUpperCase()}</Typography>
-                <Typography sx={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 600 }}>{Number(data.torque[axis]).toFixed(4)}</Typography>
-              </Box>
-            ))}
-          </Box>
-        );
-        jointState["wristWrench"] = element;
-        setJointState({ ...jointState });
-      }
-    });
-
-    return () => {
-      batteryStateSub.unsubscribe();
-      jointStatesSub.unsubscribe();
-      pose2DSub.unsubscribe();
-      wristWrenchSub.unsubscribe();
-    };
-  }, [ros]);
-
-  useEffect(() => {
-    if (!ros || customTopics.length === 0) return;
-
-    const subs = customTopics.map(ct => {
+    const subs = topics.map(ct => {
       const sub = new ROSLIB.Topic({ ros, name: ct.topic, messageType: ct.messageType });
       sub.subscribe((message: any) => {
-        if (customStopped[ct.id]) return;
-        setCustomData(prev => ({
-          ...prev,
-          [ct.id]: (
-            <Box sx={{ fontFamily: 'monospace', fontSize: '0.85rem' }}>
-              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{JSON.stringify(message, null, 2)}</pre>
-            </Box>
-          ),
-        }));
+        if (topicStoppedRef.current[ct.id]) return;
+        setTopicData(prev => ({ ...prev, [ct.id]: renderMessage(ct, message) }));
       });
       return sub;
     });
 
     return () => subs.forEach(s => s.unsubscribe());
-  }, [ros, customTopics]);
-
-  const stopDataFunc = (b, k) => {
-    stopData[k] = b;
-    setStopData({ ...stopData });
-  };
+  }, [ros, topics]);
 
   const handleAddTopic = () => {
     if (!newTopicName.trim() || !newMsgType.trim()) return;
@@ -182,7 +141,7 @@ export default function DataViewer() {
       topic: newTopicName.trim(),
       messageType: newMsgType.trim(),
     };
-    setCustomTopics(prev => [...prev, newEntry]);
+    setTopics(prev => [...prev, newEntry]);
     setNewLabel('');
     setNewTopicName('');
     setNewMsgType('');
@@ -190,13 +149,9 @@ export default function DataViewer() {
   };
 
   const handleDeleteTopic = (id: string) => {
-    setCustomTopics(prev => prev.filter(ct => ct.id !== id));
-    setCustomData(prev => { const n = { ...prev }; delete n[id]; return n; });
-    setCustomStopped(prev => { const n = { ...prev }; delete n[id]; return n; });
-  };
-
-  const toggleCustomStopped = (id: string) => {
-    setCustomStopped(prev => ({ ...prev, [id]: !prev[id] }));
+    setTopics(prev => prev.filter(ct => ct.id !== id));
+    setTopicData(prev => { const n = { ...prev }; delete n[id]; return n; });
+    setTopicStopped(prev => { const n = { ...prev }; delete n[id]; return n; });
   };
 
   return (
@@ -213,47 +168,9 @@ export default function DataViewer() {
             gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
             gap: 1,
           }}>
-            {Object.keys(jointState).map((key, index) => {
-              const meta = topicMeta[key];
-              const isStopped = stopData[key];
-              return (
-                  <Card key={index} elevation={2} sx={{ height: 360, display: 'flex', flexDirection: 'column' }}>
-                    <Box sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      px: 2,
-                      py: 1.5,
-                      borderBottom: '1px solid',
-                      borderColor: 'divider',
-                      gap: 1,
-                    }}>
-                      <Box sx={{ color: '#1565C0' }}>{meta.icon}</Box>
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }}>{meta.label}</Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{meta.topic}</Typography>
-                      </Box>
-                      <Button
-                        size="small"
-                        variant={isStopped ? 'contained' : 'outlined'}
-                        color={isStopped ? 'success' : 'error'}
-                        onClick={() => stopDataFunc(!isStopped, key)}
-                        sx={{ minWidth: 64 }}
-                      >
-                        {isStopped ? 'RUN' : 'STOP'}
-                      </Button>
-                    </Box>
-                    <CardContent sx={{ flex: 1, overflow: 'auto' }}>
-                      {jointState[key] ? jointState[key] : (
-                        <Typography variant="body2" color="text.secondary">Waiting for data...</Typography>
-                      )}
-                    </CardContent>
-                  </Card>
-              );
-            })}
-
-            {/* Custom topic cards */}
-            {customTopics.map(ct => {
-              const isStopped = !!customStopped[ct.id];
+            {topics.map(ct => {
+              const isStopped = !!topicStopped[ct.id];
+              const icon = <TopicIcon />;
               return (
                 <Card key={ct.id} elevation={2} sx={{ height: 360, display: 'flex', flexDirection: 'column' }}>
                   <Box sx={{
@@ -265,7 +182,7 @@ export default function DataViewer() {
                     borderColor: 'divider',
                     gap: 1,
                   }}>
-                    <Box sx={{ color: '#1565C0' }}><TopicIcon /></Box>
+                    <Box sx={{ color: '#1565C0' }}>{icon}</Box>
                     <Box sx={{ flex: 1 }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }}>{ct.label}</Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{ct.topic}</Typography>
@@ -274,7 +191,7 @@ export default function DataViewer() {
                       size="small"
                       variant={isStopped ? 'contained' : 'outlined'}
                       color={isStopped ? 'success' : 'error'}
-                      onClick={() => toggleCustomStopped(ct.id)}
+                      onClick={() => setTopicStopped(prev => ({ ...prev, [ct.id]: !prev[ct.id] }))}
                       sx={{ minWidth: 64 }}
                     >
                       {isStopped ? 'RUN' : 'STOP'}
@@ -284,7 +201,7 @@ export default function DataViewer() {
                     </IconButton>
                   </Box>
                   <CardContent sx={{ flex: 1, overflow: 'auto' }}>
-                    {customData[ct.id] ? customData[ct.id] : (
+                    {topicData[ct.id] ?? (
                       <Typography variant="body2" color="text.secondary">Waiting for data...</Typography>
                     )}
                   </CardContent>
@@ -305,9 +222,50 @@ export default function DataViewer() {
       </Fab>
 
       {/* Add Topic Dialog */}
-      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Add Custom Topic</DialogTitle>
+      <Dialog
+        open={addDialogOpen}
+        onClose={() => setAddDialogOpen(false)}
+        maxWidth="xs"
+        fullWidth
+        TransitionProps={{
+          onEnter: () => {
+            if (!ros) return;
+            ros.getTopics(
+              (result: { topics: string[]; types: string[] }) => {
+                const opts = result.topics
+                  .map((t, i) => ({ topic: t, type: result.types[i] }))
+                  .sort((a, b) => a.topic.localeCompare(b.topic));
+                setRosTopics(opts);
+              },
+              () => setRosTopics([]),
+            );
+          },
+        }}
+      >
+        <DialogTitle>Add Topic</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+          <Autocomplete
+            options={rosTopics}
+            getOptionLabel={opt => opt.topic}
+            noOptionsText={ros ? 'トピックが見つかりません' : 'ROS未接続'}
+            onChange={(_, selected) => {
+              if (selected) {
+                setNewTopicName(selected.topic);
+                setNewMsgType(selected.type);
+              }
+            }}
+            renderOption={(props, opt) => (
+              <Box component="li" {...props} key={opt.topic}>
+                <Box>
+                  <Typography variant="body2" sx={{ fontFamily: 'monospace' }}>{opt.topic}</Typography>
+                  <Typography variant="caption" color="text.secondary">{opt.type}</Typography>
+                </Box>
+              </Box>
+            )}
+            renderInput={params => <TextField {...params} label="トピックを選択" size="small" />}
+            size="small"
+            fullWidth
+          />
           <TextField
             label="Label (optional)"
             value={newLabel}
