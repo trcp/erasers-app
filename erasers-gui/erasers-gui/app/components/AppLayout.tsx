@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useRos } from '~/scripts/ros';
+import ROSLIB from 'roslib';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
 import Dialog from '@mui/material/Dialog';
@@ -21,6 +22,8 @@ import MapIcon from '@mui/icons-material/Map';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import WifiIcon from '@mui/icons-material/Wifi';
+import BatteryFullIcon from '@mui/icons-material/BatteryFull';
+import StopIcon from '@mui/icons-material/Stop';
 
 const DRAWER_WIDTH = 80;
 
@@ -48,10 +51,27 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(defaultOpen);
-  const { rosConnected, hostname, setHostname } = useRos();
+  const { ros, rosConnected, hostname, setHostname } = useRos();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inputValue, setInputValue] = useState(hostname);
+  const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!ros) return;
+    const batterySub = new ROSLIB.Topic({ ros, name: '/hsrb/battery_states', messageType: 'tmc_msgs/BatteryState' });
+    batterySub.subscribe((message: any) => {
+      const level = message?.charge_level ?? message?.percentage ?? null;
+      if (level !== null) setBatteryLevel(Math.round(Number(level) * 100));
+    });
+    return () => batterySub.unsubscribe();
+  }, [ros]);
+
+  const handleEmergencyStop = () => {
+    if (!ros) return;
+    const cmdVel = new ROSLIB.Topic({ ros, name: '/hsrb/command_velocity', messageType: 'geometry_msgs/Twist' });
+    cmdVel.publish(new ROSLIB.Message({ linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } }));
+  };
 
   const handleOpenDialog = () => {
     setInputValue(hostname);
@@ -157,6 +177,44 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
             );
           })}
         </Box>
+
+        {/* Battery level */}
+        <Tooltip title={batteryLevel !== null ? `Battery: ${batteryLevel}%` : 'Battery: N/A'} placement="right">
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', pb: 1 }}>
+            <BatteryFullIcon sx={{ fontSize: '1.2rem', color: batteryLevel !== null && batteryLevel < 20 ? '#f44336' : 'rgba(255,255,255,0.85)' }} />
+            <Typography sx={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.7)' }}>
+              {batteryLevel !== null ? `${batteryLevel}%` : '--'}
+            </Typography>
+          </Box>
+        </Tooltip>
+
+        {/* Emergency Stop button */}
+        <Tooltip title="Emergency Stop" placement="right">
+          <Box
+            onClick={handleEmergencyStop}
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              py: 1,
+              px: 0.5,
+              mx: 0.5,
+              mb: 1,
+              cursor: 'pointer',
+              bgcolor: '#d32f2f',
+              borderRadius: 2,
+              boxShadow: '0 0 8px rgba(211,47,47,0.6)',
+              '&:hover': { bgcolor: '#b71c1c' },
+              '&:active': { transform: 'scale(0.95)' },
+            }}
+          >
+            <StopIcon sx={{ fontSize: '1.4rem', color: '#fff' }} />
+            <Typography variant="caption" sx={{ fontSize: '0.55rem', color: '#fff', mt: 0.5, lineHeight: 1.1, textAlign: 'center' }}>
+              STOP
+            </Typography>
+          </Box>
+        </Tooltip>
 
         {/* ROS connection indicator (clickable) */}
         <Tooltip title="ROS Settings" placement="right">
