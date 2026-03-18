@@ -76,27 +76,27 @@ export default function TaskTimer({ defaultDuration, optionVariables, task_key, 
     }, [isActive]);
 
     return (
-        <Box sx={{ bgcolor: 'background.default', p: 3, borderRadius: 4, boxShadow: 1 }}>
+        <Box sx={{ p: 0.5 }}>
             <Box>
-                <Typography variant="h5">
+                <Typography variant="h6">
                     Timer: {String(Math.floor(remainTime / 60)).padStart(2, '0')}:{String(remainTime % 60).padStart(2, '0')}
                 </Typography>
             </Box>
-            <Box sx={{ marginTop: 2 }}>
-                <Button onClick={resetTimer} disabled={isActive} variant="outlined" sx={{ marginRight: 2 }}>
+            <Box sx={{ marginTop: 1, display: 'flex', gap: 1 }}>
+                <Button size="small" onClick={resetTimer} disabled={isActive} variant="outlined">
                     Default
                 </Button>
-                <Button onClick={() => adjustTime(60)} disabled={isActive} variant="outlined" sx={{ marginRight: 2 }}>
-                    +1 minute
+                <Button size="small" onClick={() => adjustTime(60)} disabled={isActive} variant="outlined">
+                    +1m
                 </Button>
-                <Button onClick={() => adjustTime(-60)} disabled={isActive} variant="outlined" sx={{ marginRight: 2 }}>
-                    -1 minute
+                <Button size="small" onClick={() => adjustTime(-60)} disabled={isActive} variant="outlined">
+                    -1m
                 </Button>
-                <Button onClick={() => adjustTime(10)} disabled={isActive} variant="outlined" sx={{ marginRight: 2 }}>
-                    +10 seconds
+                <Button size="small" onClick={() => adjustTime(10)} disabled={isActive} variant="outlined">
+                    +10s
                 </Button>
-                <Button onClick={() => adjustTime(-10)} disabled={isActive} variant="outlined">
-                    -10 seconds
+                <Button size="small" onClick={() => adjustTime(-10)} disabled={isActive} variant="outlined">
+                    -10s
                 </Button>
             </Box>
         </Box>

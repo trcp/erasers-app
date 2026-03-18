@@ -2,6 +2,7 @@
 
 import os
 import sys
+import argparse
 import logging
 import subprocess
 import json
@@ -272,13 +273,26 @@ def run_tkinter(start_event, app_state):
 if __name__ == "__main__":
     logger.info("start")
 
-    start_event = threading.Event()
-    app_state = {
-        "config_path": None,
-    }
+    parser = argparse.ArgumentParser(description="erasers task controller server")
+    parser.add_argument("--config", type=str, default=None, help="path to config directory (CUI mode)")
+    args = parser.parse_args()
 
-    tkinter_thread = Thread(target=run_tkinter, args=(start_event, app_state), daemon=True)
-    tkinter_thread.start()
+    if args.config:
+        config_path = str(Path(args.config).resolve())
+        yaml_files = [f for f in os.listdir(config_path) if f.endswith(".yaml")]
+        if len(yaml_files) == 0:
+            logger.error(f"No YAML files found in {config_path}")
+            sys.exit(1)
+        logger.info(f"CUI mode: loading config from {config_path}")
+        run_fastapi(config_path)
+    else:
+        start_event = threading.Event()
+        app_state = {
+            "config_path": None,
+        }
 
-    # Block until RUN is pressed inside the GUI
-    tkinter_thread.join()
+        tkinter_thread = Thread(target=run_tkinter, args=(start_event, app_state), daemon=True)
+        tkinter_thread.start()
+
+        # Block until RUN is pressed inside the GUI
+        tkinter_thread.join()

@@ -29,6 +29,7 @@ import OptionVariables from '~/components/dashboard/OptionVariablesParser';
 import LogModal from '~/components/dashboard/LogModal';
 import AppLayout from '~/components/AppLayout';
 import { useRos } from '~/scripts/ros';
+import { useTaskStarter } from '~/scripts/taskstarter_context';
 
 const hostName = import.meta.env.VITE_MASTER_HOSTNAME;
 
@@ -54,17 +55,21 @@ function a11yProps(index: number) {
 export default function TaskStarter() {
 
   const { hostname } = useRos();
-
-  const [serverIp, setServerIp] = useState('localhost');
-  const [serverIpInput, setServerIpInput] = useState('localhost');
-  const [connectError, setConnectError] = useState('');
-
-  // --- Execution config ---
-  const [networkIf, setNetworkIf] = useState('');
-  const [networkIp, setNetworkIp] = useState('');
-  const [networkInterfaces, setNetworkInterfaces] = useState<{ name: string; ip: string }[]>([]);
-  const [nodeDockerMode, setNodeDockerMode] = useState<Record<string, Record<string, boolean>>>({});
-  const [nodeComposePath, setNodeComposePath] = useState<Record<string, Record<string, string>>>({});
+  const {
+    serverIp, setServerIp,
+    serverIpInput, setServerIpInput,
+    connectError, setConnectError,
+    networkIf, setNetworkIf,
+    networkIp, setNetworkIp,
+    networkInterfaces, setNetworkInterfaces,
+    nodeDockerMode, setNodeDockerMode,
+    nodeComposePath, setNodeComposePath,
+    runStatus, setRunStatus,
+    debugChecked, setDebugChecked,
+    taskData, setTaskData,
+    tabValue, setTabValue,
+    optionVariables, setOptionVariable,
+  } = useTaskStarter();
 
   const fetchExecutionConfig = async (ip: string) => {
     const [cfgRes, nifRes] = await Promise.all([
@@ -125,7 +130,6 @@ export default function TaskStarter() {
     return is_running;
   };
 
-  const [runStatus, setRunStatus] = useState(null);
   const handleRunButtonClick = async (taskName, nodeName, debug, option) => {
     var _body: any = { "debug": debug };
     const defaultop = taskData[taskName].programs[nodeName].command.variables;
@@ -169,19 +173,16 @@ export default function TaskStarter() {
     }
   };
 
-  const [openLogModal, setOpenLogModal] = useState([]);
+  const [openLogModal, setOpenLogModal] = useState<any[]>([]);
   const handleGetLogButtonClick = (taskName, nodeName) => {
     setOpenLogModal([taskName, nodeName]);
   };
 
-  const [debugChecked, setDebugChecked] = useState(null);
   const handleChangeDebug = (_event, task_index, node_index) => {
     var copy = debugChecked;
     copy[task_index][node_index] = _event.target.checked;
     setDebugChecked([...copy]);
   };
-
-  const [taskData, setTaskData] = useState<any>();
 
   const loadTasks = async (ip: string) => {
     const tsData = await getTask(ip);
@@ -230,7 +231,9 @@ export default function TaskStarter() {
   };
 
   useEffect(() => {
-    Promise.all([loadTasks('localhost'), fetchExecutionConfig('localhost')]).catch(() => {});
+    if (!taskData) {
+      Promise.all([loadTasks(serverIp), fetchExecutionConfig(serverIp)]).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
@@ -239,12 +242,9 @@ export default function TaskStarter() {
     }
   }, [hostname]);
 
-  const [tabValue, setTabValue] = useState(0);
   const handleChangeTaskTab = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
-
-  const [optionVariables, setOptionVariable] = useState({});
 
   return (
     <AppLayout>

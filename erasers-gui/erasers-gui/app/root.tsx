@@ -12,6 +12,7 @@ import "./globals.css";
 
 import createCache from "@emotion/cache";
 import { RosProvider } from "~/scripts/ros";
+import { TaskStarterProvider } from "~/scripts/taskstarter_context";
 import { CacheProvider } from "@emotion/react";
 import { ThemeProvider, createTheme } from "@mui/material/styles";
 import CssBaseline from "@mui/material/CssBaseline";
@@ -75,7 +76,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           <ThemeProvider theme={theme}>
             <CssBaseline />
             <RosProvider>
-              {children}
+              <TaskStarterProvider>
+                {children}
+              </TaskStarterProvider>
             </RosProvider>
           </ThemeProvider>
         </CacheProvider>
