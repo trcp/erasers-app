@@ -26,6 +26,7 @@ import StopIcon from '@mui/icons-material/Stop';
 import ArticleIcon from '@mui/icons-material/Article';
 import RouterIcon from '@mui/icons-material/Router';
 import StorageIcon from '@mui/icons-material/Storage';
+import TerminalIcon from '@mui/icons-material/Terminal';
 
 import OptionVariables from '~/components/dashboard/OptionVariablesParser';
 import LogModal from '~/components/dashboard/LogModal';
@@ -166,7 +167,7 @@ export default function TaskStarter() {
   const handleRunButtonClick = async (taskName, nodeName, debug, option) => {
     var _body: any = { "debug": debug };
     const defaultop = taskData[taskName].programs[nodeName].command.variables;
-    const setedop = option[taskName][nodeName];
+    const setedop = option[taskName]?.[nodeName];
     if (setedop != undefined) {
       for (const key of Object.keys(setedop)) {
         if (setedop[key] != undefined) {
@@ -190,6 +191,55 @@ export default function TaskStarter() {
       run_status[taskName][nodeName] = true;
       setRunStatus({ ...run_status });
     }
+  };
+
+  const handleRunWithTerminalButtonClick = async (taskName, nodeName) => {
+    const defaultop = taskData[taskName].programs[nodeName].command.variables;
+    const setedop = optionVariables[taskName]?.[nodeName];
+    var _body: any = { terminal: true };
+    if (setedop != undefined) {
+      for (const key of Object.keys(setedop)) {
+        if (setedop[key] != undefined) {
+          if (defaultop[key].type == 'unixtime') {
+            _body[key] = optionVariables[taskName][nodeName][key];
+          } else {
+            _body[key] = setedop[key];
+          }
+        }
+      }
+    }
+    const response = await fetch(`http://${serverIp}:3001/run_task/${taskName}/${nodeName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(_body),
+    });
+    if (response.ok) {
+      var run_status = runStatus;
+      run_status[taskName][nodeName] = true;
+      setRunStatus({ ...run_status });
+    }
+  };
+
+  const handleRunAllButtonClick = async (taskName) => {
+    const nodeNames = Object.keys(taskData[taskName].programs);
+    await Promise.all(nodeNames.map((nodeName) =>
+      handleRunButtonClick(taskName, nodeName, false, optionVariables)
+    ));
+  };
+
+  const handleRunWeztermButtonClick = async (taskName) => {
+    await fetch(`http://${serverIp}:3001/run_wezterm/${taskName}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+  };
+
+  const handleKillAllButtonClick = async (taskName) => {
+    const nodeNames = Object.keys(taskData[taskName].programs);
+    await Promise.all(nodeNames.map((nodeName) =>
+      handleKillButtonClick(taskName, nodeName)
+    ));
   };
 
   const handleKillButtonClick = async (taskName, nodeName) => {
@@ -355,6 +405,8 @@ export default function TaskStarter() {
                   value={tabValue}
                   onChange={handleChangeTaskTab}
                   aria-label="task tabs"
+                  variant="scrollable"
+                  scrollButtons="auto"
                   sx={{
                     '& .MuiTab-root': { borderRadius: '8px 8px 0 0' },
                     '& .Mui-selected': { bgcolor: 'primary.main', color: '#fff !important' },
@@ -373,10 +425,13 @@ export default function TaskStarter() {
                     {taskData[task_key].task.description}
                   </Typography>
                   <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
-                    <Button variant="contained" color="success" startIcon={<PlayArrowIcon />} disabled={!networkIf}>
+                    <Button variant="contained" color="success" startIcon={<PlayArrowIcon />} disabled={!networkIf} onClick={() => handleRunAllButtonClick(task_key)}>
                       RUN ALL
                     </Button>
-                    <Button variant="outlined" color="error" startIcon={<StopIcon />}>
+                    <Button variant="outlined" color="primary" startIcon={<TerminalIcon />} disabled={!networkIf} onClick={() => handleRunWeztermButtonClick(task_key)}>
+                      Run with Terminal
+                    </Button>
+                    <Button variant="outlined" color="error" startIcon={<StopIcon />} onClick={() => handleKillAllButtonClick(task_key)}>
                       KILL ALL
                     </Button>
                   </Box>
@@ -493,6 +548,16 @@ export default function TaskStarter() {
                                 onClick={() => handleKillButtonClick(task_key, node_key)}
                               >
                                 KILL
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="primary"
+                                size="small"
+                                startIcon={<TerminalIcon />}
+                                disabled={!networkIf}
+                                onClick={() => handleRunWithTerminalButtonClick(task_key, node_key)}
+                              >
+                                RUN WITH TERMINAL
                               </Button>
                               <Button
                                 variant="outlined"

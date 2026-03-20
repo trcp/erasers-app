@@ -69,9 +69,11 @@ class NodeData:
 
         ros_ip = get_ip_address(self.network_if)
 
+        terminal_mode = opt.get("terminal", False)
+
         if self.docker_mode:
             display = os.environ.get("DISPLAY", ":0")
-            cmd = [
+            docker_base = [
                 "docker", "compose", "-f", os.path.expanduser(self.compose_path),
                 "run", "--rm", "-d", "-q",
                 "-e", f"NETWORK_IF={self.network_if}",
@@ -79,12 +81,18 @@ class NodeData:
                 "-e", f"ROS_IP={ros_ip}",
                 "-e", f"DISPLAY={display}",
                 "hsrb",
-                "bash", "-ic", f"hsrb_mode && {formatted_cmd}"
             ]
+            if terminal_mode:
+                cmd = docker_base + ["wezterm", "start", "--", "bash", "-c", f"{formatted_cmd}; exec bash"]
+            else:
+                cmd = docker_base + ["bash", "-ic", f"hsrb_mode && {formatted_cmd}"]
         else:
             env["ROS_MASTER_URI"] = rm_uri
             env["ROS_IP"] = ros_ip
-            cmd = formatted_cmd.split(" ")
+            if terminal_mode:
+                cmd = ["wezterm", "start", "--", "bash", "-c", f"{formatted_cmd}; exec bash"]
+            else:
+                cmd = formatted_cmd.split(" ")
 
         return cmd, env
 

@@ -46,6 +46,7 @@ class ErasersTaskControlServer:
         self.router.add_api_route("/get_execution_config", self.get_execution_config, methods=["GET"])
         self.router.add_api_route("/set_execution_config", self.set_execution_config, methods=["POST"])
         self.router.add_api_route("/set_node_config/{task_name}/{node_name}", self.set_node_config, methods=["POST"])
+        self.router.add_api_route("/run_wezterm/{task_name}", self.run_wezterm, methods=["POST"])
 
         self.task_data_list = task_data_list
         self.ros_master_uri = ros_master_uri
@@ -131,6 +132,30 @@ class ErasersTaskControlServer:
             for node in task.programs.values():
                 node.network_if = network_if
         return {"ok": True}
+
+    def run_wezterm(self, task_name: str):
+        if task_name not in self.task_data_list:
+            raise HTTPException(status_code=404, detail=f"Task not found: {task_name}")
+        compose_path = os.path.expanduser("~/erasers_ws/compose.yaml")
+        task_config = f"/home/roboworks-docker/erasers_ws/wezterm/tasks/{task_name}.lua"
+        display = os.environ.get("DISPLAY", ":0")
+        network_if = self.execution_config["network_if"]
+        ros_ip = get_ip_address(network_if)
+        uri_map = {"hsrb80": "192.168.11.80", "hsrb33": "192.168.11.33", "localhost": "localhost"}
+        host = uri_map.get(self.ros_master_uri, self.ros_master_uri)
+        rm_uri = "http://{}:11311".format(host)
+        cmd = [
+            "docker", "compose", "-f", compose_path,
+            "run", "--rm",
+            "-e", f"DISPLAY={display}",
+            "-e", f"NETWORK_IF={network_if}",
+            "-e", f"ROS_MASTER_URI={rm_uri}",
+            "-e", f"ROS_IP={ros_ip}",
+            "hsrb",
+            "wezterm", "--config-file", task_config,
+        ]
+        subprocess.Popen(cmd)
+        return {"run": True}
 
     def set_node_config(self, task_name: str, node_name: str, body=Body(...)):
         node = self.task_data_list[task_name].programs[node_name]
@@ -240,7 +265,7 @@ def run_tkinter(start_event, app_state):
                 run_fastapi(config_path)
             except Exception as e:
                 logger.error(f"FastAPI error: {e}")
-                root.after(0, lambda: status_label.config(text=f"Error: {e}", fg="red"))
+                root.after(0, lambda err=e: status_label.config(text=f"Error: {err}", fg="red"))
 
         def _set_running():
             status_label.config(text="\u2713 Running at http://0.0.0.0:3001", fg="green")
