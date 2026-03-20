@@ -4,8 +4,11 @@ import time
 import os
 import sys
 import subprocess
+import logging
 
 from lupa import LuaRuntime
+
+logger = logging.getLogger('erasers')
 import json
 import socket
 import fcntl
@@ -49,11 +52,7 @@ class NodeData:
         self.container_id = None
 
     def build_cmd(self, template, ros_master_uri, opt):
-        print("-"*100)
-        print(template)
-        print(ros_master_uri)
-        print(opt)
-        print("-"*100)
+        logger.debug(f"build_cmd: template={template!r}, ros_master_uri={ros_master_uri}, opt={opt}")
 
         # settings for ros master uri
         uri_map = {"hsrb80": "192.168.11.80", "hsrb33": "192.168.11.33", "localhost": "localhost"}
@@ -97,19 +96,14 @@ class NodeData:
         return cmd, env
 
     def run(self, body, ros_master_uri):
-        print("running with option arguments -> ", body)
-        print("running with ROS_MASTER_URI -> ", ros_master_uri)
-
         if "start_time" in body:
-            print("START_TIME IS IN BODY, ", body["start_time"])
             self.command.variables["start_time"]["default"] = body["start_time"]
-            print("START_TIME IS IN BODY, ", self.command.variables["start_time"]["default"])
 
         cmd, my_env = self.build_cmd(self.command.template, ros_master_uri, body)
 
         if self.proc is not None:
             if self.proc.poll() is None:
-                print("already running")
+                logger.warning(f"[{self.node_name}] already running")
                 return None
             else:
                 self.proc = None
@@ -125,19 +119,17 @@ class NodeData:
 
         if not os.path.exists(erasers_log_dir):
             os.mkdir(erasers_log_dir)
-            print(f"Directory '{erasers_log_dir}' created.")
-        else:
-            print(f"Directory '{erasers_log_dir}' already exists.")
-        
+            logger.debug(f"ログディレクトリ作成: {erasers_log_dir}")
+
         self.log_file_name = os.path.join(erasers_log_dir, txt_name)
         self.log_file = open(self.log_file_name, "w")
-        print(f"[run] $ {' '.join(cmd)}")
+        logger.info(f"[{self.node_name}] $ {' '.join(cmd)}")
 
         if self.docker_mode:
             # Run detached and capture container ID from stdout
             result = subprocess.run(cmd, capture_output=True, text=True)
             self.container_id = result.stdout.strip()
-            print(f"[run] container id: {self.container_id}")
+            logger.info(f"[{self.node_name}] container id: {self.container_id}")
             # Follow container logs; proc exits when container stops
             self.proc = subprocess.Popen(
                 ["docker", "logs", "-f", self.container_id],
@@ -150,7 +142,7 @@ class NodeData:
 
     def kill(self):
         if self.docker_mode and self.container_id:
-            print(f"[kill] docker stop {self.container_id}")
+            logger.info(f"[{self.node_name}] docker stop {self.container_id}")
             subprocess.run(["docker", "stop", self.container_id], check=False)
             self.container_id = None
 
@@ -159,7 +151,7 @@ class NodeData:
 
         if self.command.kill != "":
             cmd = self.command.kill.split()
-            print(f"[kill] $ {' '.join(cmd)}")
+            logger.info(f"[{self.node_name}] $ {' '.join(cmd)}")
             subprocess.Popen(cmd)
 
         self.proc = None

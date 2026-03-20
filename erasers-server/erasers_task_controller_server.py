@@ -27,8 +27,12 @@ class XmlSaveBody(BaseModel):
 
 from parser import TaskData, get_ip_address
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger('uvicorn')
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger('erasers')
 
 class ErasersTaskControlServer:
     def __init__(self, name: str, task_data_list, ros_master_uri):
@@ -91,10 +95,10 @@ class ErasersTaskControlServer:
                     task_json["programs"][node_key]["docker_mode"] = node.docker_mode
                     task_json["programs"][node_key]["compose_path"] = node.compose_path
             result[key] = task_json
-            logger.info(task_json)
         return result
 
     def run_task(self, task_name: str, node_name: str, body=Body(...)):
+        logger.info(f"▶ [{task_name}/{node_name}] タスク開始")
         self.task_data_list[task_name].programs[node_name].run(body, self.ros_master_uri)
         return {"run": True}
 
@@ -107,6 +111,7 @@ class ErasersTaskControlServer:
     def kill_task(self, task_name: str, node_name: str):
         node = self.task_data_list[task_name].programs[node_name]
         if node.is_running():
+            logger.info(f"■ [{task_name}/{node_name}] タスク停止")
             self.task_data_list[task_name].programs[node_name].kill()
 
         return {"run": True}
@@ -128,6 +133,7 @@ class ErasersTaskControlServer:
         if "ros_master_uri" in body:
             self.ros_master_uri = body["ros_master_uri"]
         network_if = self.execution_config["network_if"]
+        logger.info(f"設定更新: network_if={network_if}, ros_master_uri={self.ros_master_uri}")
         for task in self.task_data_list.values():
             for node in task.programs.values():
                 node.network_if = network_if
@@ -154,6 +160,7 @@ class ErasersTaskControlServer:
             "hsrb",
             "wezterm", "--config-file", task_config,
         ]
+        logger.info(f"Wezterm起動: {task_name}")
         subprocess.Popen(cmd)
         return {"run": True}
 
@@ -168,7 +175,7 @@ class ErasersTaskControlServer:
         return {"ok": True}
 
     async def websocket_endpoint(self, websocket: WebSocket, task_name: str, node_name: str):
-        logger.info(f"ws {task_name} {node_name}")
+        logger.info(f"WebSocket接続: {task_name}/{node_name}")
         await websocket.accept()
 
         node = self.task_data_list[task_name].programs[node_name]
@@ -186,14 +193,15 @@ class ErasersTaskControlServer:
 
 
 def run_fastapi(path):
-    logger.info("run fastapi")
-
     yaml_path = [os.path.join(path, i) for i in os.listdir(path) if i.endswith(".lua")]
     task_data_list = {}
     for p in yaml_path:
         task_data = TaskData(p)
         task_name = task_data.task_name
         task_data_list[task_name] = task_data
+
+    task_names = list(task_data_list.keys())
+    logger.info(f"読み込み完了: {len(task_names)} タスク {task_names}")
 
     app = FastAPI()
     app.add_middleware(
@@ -207,7 +215,8 @@ def run_fastapi(path):
     hello = ErasersTaskControlServer("World", task_data_list, "localhost")
     app.include_router(hello.router)
 
-    uvicorn.run(app, host="0.0.0.0", port=3001)
+    logger.info("サーバー起動: http://0.0.0.0:3001")
+    uvicorn.run(app, host="0.0.0.0", port=3001, access_log=False)
 
 
 def kill_fastapi():
@@ -297,7 +306,7 @@ def run_tkinter(start_event, app_state):
 
 
 if __name__ == "__main__":
-    logger.info("start")
+    logger.info("Erasers Task Controller Server 起動")
 
     parser = argparse.ArgumentParser(description="erasers task controller server")
     parser.add_argument("--config", type=str, default=None, help="path to config directory (CUI mode)")
@@ -309,7 +318,7 @@ if __name__ == "__main__":
         if len(yaml_files) == 0:
             logger.error(f"No Lua task files found in {config_path}")
             sys.exit(1)
-        logger.info(f"CUI mode: loading config from {config_path}")
+        logger.info(f"CUIモード: {config_path}")
         run_fastapi(config_path)
     else:
         start_event = threading.Event()
