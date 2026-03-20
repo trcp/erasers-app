@@ -5,7 +5,7 @@ import os
 import sys
 import subprocess
 
-import yaml
+from lupa import LuaRuntime
 import json
 import socket
 import fcntl
@@ -173,7 +173,7 @@ class NodeData:
 class TaskData:
     def __init__(self, path, docker_mode=False, network_if="wlo1", compose_path=""):
 
-        config = self._load_yaml(path)
+        config = self._load_lua(path)
 
         self.task_name = config["task"]["task_name"]
         self.display_name = config["task"]["display_name"]
@@ -201,15 +201,26 @@ class TaskData:
         # return json_format
         return self.config
 
-    def _load_yaml(self, path):
-        with open(path, mode="r") as f:
-            data = yaml.safe_load(f)
+    def _load_lua(self, path):
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        result = lua.eval(f'(function() return dofile("{path}") end)()')
+        return self._lua_to_dict(result)
 
-        return data
+    def _lua_to_dict(self, obj):
+        """Recursively convert a lupa LuaTable to Python dict/list/primitive."""
+        if obj is None:
+            return None
+        if hasattr(obj, 'items'):
+            keys = list(obj.keys())
+            if keys and all(isinstance(k, int) for k in keys):
+                return [self._lua_to_dict(obj[k]) for k in sorted(keys)]
+            else:
+                return {str(k): self._lua_to_dict(v) for k, v in obj.items() if k != 'layout'}
+        return obj
 
 if __name__ == "__main__":
 
-    task_data = TaskData("config/tidyup.yaml")
+    task_data = TaskData(os.path.expanduser("~/erasers_ws/wezterm/tasks/tidyup.lua"))
     # print(task_data.task_name)
     print(task_data.programs["yolo"].command.template)
     print(task_data.to_json())

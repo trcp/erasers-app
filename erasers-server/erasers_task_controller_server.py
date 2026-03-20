@@ -163,7 +163,7 @@ class ErasersTaskControlServer:
 def run_fastapi(path):
     logger.info("run fastapi")
 
-    yaml_path = [os.path.join(path, i) for i in os.listdir(path) if i.endswith(".yaml")]
+    yaml_path = [os.path.join(path, i) for i in os.listdir(path) if i.endswith(".lua")]
     task_data_list = {}
     for p in yaml_path:
         task_data = TaskData(p)
@@ -203,10 +203,10 @@ def run_tkinter(start_event, app_state):
         folder_path = filedialog.askdirectory()
         if not folder_path:
             return
-        yaml_files = [f for f in os.listdir(folder_path) if f.endswith(".yaml")]
+        yaml_files = [f for f in os.listdir(folder_path) if f.endswith(".lua")]
         if len(yaml_files) == 0:
             path_label.config(text=f"path: {folder_path}", fg="red")
-            yaml_status_label.config(text="No YAML files found", fg="red")
+            yaml_status_label.config(text="No Lua task files found", fg="red")
             app_state["config_path"] = None
             run_button.config(state=tk.DISABLED)
         else:
@@ -280,9 +280,9 @@ if __name__ == "__main__":
 
     if args.config:
         config_path = str(Path(args.config).resolve())
-        yaml_files = [f for f in os.listdir(config_path) if f.endswith(".yaml")]
+        yaml_files = [f for f in os.listdir(config_path) if f.endswith(".lua")]
         if len(yaml_files) == 0:
-            logger.error(f"No YAML files found in {config_path}")
+            logger.error(f"No Lua task files found in {config_path}")
             sys.exit(1)
         logger.info(f"CUI mode: loading config from {config_path}")
         run_fastapi(config_path)
