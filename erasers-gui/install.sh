@@ -30,7 +30,7 @@ cat > "$AUTOSTART_FILE" <<EOF
 [Desktop Entry]
 Type=Application
 Name=Erasers GUI
-Exec=/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:5173
+Exec=/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
 Hidden=false
 NoDisplay=false
 X-GNOME-Autostart-enabled=true
