@@ -30,22 +30,21 @@ export function RosProvider({ children }: { children: React.ReactNode }) {
   hostnameRef.current = hostname;
 
   const rosRef = useRef<ROSLIB.Ros | null>(null);
+  const [ros, setRos] = useState<ROSLIB.Ros | null>(null);
   const [rosConnected, setRosConnected] = useState(false);
 
-  if (!rosRef.current) {
-    rosRef.current = new ROSLIB.Ros({ url: buildUrl(hostname) });
-  }
-
   useEffect(() => {
-    const ros = rosRef.current!;
-    ros.on('connection', () => setRosConnected(true));
-    ros.on('close', () => {
+    const instance = new ROSLIB.Ros({ url: buildUrl(hostnameRef.current) });
+    rosRef.current = instance;
+    setRos(instance);
+    instance.on('connection', () => setRosConnected(true));
+    instance.on('close', () => {
       setRosConnected(false);
-      ros.connect(buildUrl(hostnameRef.current));
+      instance.connect(buildUrl(hostnameRef.current));
     });
-    ros.on('error', () => {
+    instance.on('error', () => {
       setRosConnected(false);
-      ros.connect(buildUrl(hostnameRef.current));
+      instance.connect(buildUrl(hostnameRef.current));
     });
   }, []);
 
@@ -58,7 +57,7 @@ export function RosProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <RosContext.Provider value={{ ros: rosRef.current, rosConnected, hostname, setHostname }}>
+    <RosContext.Provider value={{ ros, rosConnected, hostname, setHostname }}>
       {children}
     </RosContext.Provider>
   );
