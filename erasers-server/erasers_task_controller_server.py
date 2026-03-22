@@ -187,6 +187,8 @@ class ErasersTaskControlServer:
                         l = f.readline()
                         if l != "":
                             await websocket.send_text(l)
+                        else:
+                            await asyncio.sleep(0.1)
                     except Exception as e:
                         logger.debug(f"WebSocket read end: {e}")
                         break
