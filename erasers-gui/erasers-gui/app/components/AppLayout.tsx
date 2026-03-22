@@ -23,7 +23,6 @@ import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import WifiIcon from '@mui/icons-material/Wifi';
 import BatteryFullIcon from '@mui/icons-material/BatteryFull';
-import StopIcon from '@mui/icons-material/Stop';
 
 const DRAWER_WIDTH = 80;
 
@@ -67,11 +66,6 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
     return () => batterySub.unsubscribe();
   }, [ros]);
 
-  const handleEmergencyStop = () => {
-    if (!ros) return;
-    const runstop = new ROSLIB.Topic({ ros, name: '/hsrb/runstop_button', messageType: 'std_msgs/Bool' });
-    runstop.publish(new ROSLIB.Message({ data: true }));
-  };
 
   const handleOpenDialog = () => {
     setInputValue(hostname);
@@ -188,33 +182,6 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
           </Box>
         </Tooltip>
 
-        {/* Emergency Stop button */}
-        <Tooltip title="Emergency Stop" placement="right">
-          <Box
-            onClick={handleEmergencyStop}
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              py: 1,
-              px: 0.5,
-              mx: 0.5,
-              mb: 1,
-              cursor: 'pointer',
-              bgcolor: '#d32f2f',
-              borderRadius: 2,
-              boxShadow: '0 0 8px rgba(211,47,47,0.6)',
-              '&:hover': { bgcolor: '#b71c1c' },
-              '&:active': { transform: 'scale(0.95)' },
-            }}
-          >
-            <StopIcon sx={{ fontSize: '1.4rem', color: '#fff' }} />
-            <Typography variant="caption" sx={{ fontSize: '0.55rem', color: '#fff', mt: 0.5, lineHeight: 1.1, textAlign: 'center' }}>
-              STOP
-            </Typography>
-          </Box>
-        </Tooltip>
 
         {/* ROS connection indicator (clickable) */}
         <Tooltip title="ROS Settings" placement="right">

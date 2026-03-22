@@ -63,19 +63,20 @@ const CardTemplate = ({ msg, pubFunc }) => {
     };
 
     return (
-        <Card elevation={2} sx={{ width: '500px', height: '400px', margin: '8px', position: 'relative' }}>
-            <Box sx={{ overflow: 'auto', maxHeight: '85%' }}>
-                <CardContent>
-                    <Typography variant="body2" color="text.secondary" sx={{ fontSize: '14px', marginBottom: '8px' }}>
-                        {pubFunc.name} : {pubFunc.messageType}
-                    </Typography>
-                    <Box>
-                        <TField data={msg} />
-                    </Box>
-                </CardContent>
-            </Box>
-            <CardActions sx={{ position: 'absolute', bottom: 0, right: 0 }}>
-                <Button size="small" variant="contained" sx={{ marginRight: '8px' }}>Reset</Button>
+        <Card elevation={2} sx={{ width: 500 }}>
+            <CardContent>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                    {pubFunc.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    {pubFunc.messageType}
+                </Typography>
+                <Box sx={{ overflow: 'auto', maxHeight: 280 }}>
+                    <TField data={msg} />
+                </Box>
+            </CardContent>
+            <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1 }}>
+                <Button size="small" variant="outlined">Reset</Button>
                 <Button size="small" variant="contained" onClick={() => pubMsg(msg)}>Publish</Button>
             </CardActions>
         </Card>
@@ -314,7 +315,7 @@ export default function Controller() {
                     <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>Robot Controller</Typography>
                 </Box>
 
-                <Box sx={{ flex: 1, overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+                <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ px: 2, pt: 1 }}>
                         <Tabs
                             value={tabValue}
@@ -384,7 +385,7 @@ export default function Controller() {
                     </TabPanel>
 
                     <TabPanel value={tabValue} index={1}>
-                        <Box sx={{ p: 2, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start' }}>
+                        <Box sx={{ p: 2, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start', overflowY: 'auto', flex: 1, minHeight: 0 }}>
                             {/* Existing topic cards */}
                             <CardTemplate msg={twist} pubFunc={cmdVelRef.current} />
                             <CardTemplate msg={pose_stamped} pubFunc={nav2d.current} />
@@ -393,22 +394,22 @@ export default function Controller() {
                             {/* Arm Joints */}
                             <Card elevation={2} sx={{ width: 500 }}>
                                 <CardContent>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Arm Joints</Typography>
-                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                            <Typography variant="body2">Motion Time:</Typography>
-                                            <TextField
-                                                size="small"
-                                                type="number"
-                                                value={motionTime}
-                                                onChange={(e) => setMotionTime(Number(e.target.value))}
-                                                inputProps={{ min: 0.1, step: 0.5 }}
-                                                sx={{ width: 80 }}
-                                            />
-                                            <Typography variant="body2">s</Typography>
-                                        </Box>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Arm Joints</Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                        control_msgs/FollowJointTrajectoryAction
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                        <Typography variant="body2">Motion Time:</Typography>
+                                        <TextField
+                                            size="small"
+                                            type="number"
+                                            value={motionTime}
+                                            onChange={(e) => setMotionTime(Number(e.target.value))}
+                                            inputProps={{ min: 0.1, step: 0.5 }}
+                                            sx={{ width: 80 }}
+                                        />
+                                        <Typography variant="body2">s</Typography>
                                     </Box>
-
                                     {([
                                         { key: 'arm_lift',   label: 'arm_lift',   min: 0.00,  max: 0.69, step: 0.01, unit: 'm' },
                                         { key: 'arm_flex',   label: 'arm_flex',   min: -2.62, max: 0.00, step: 0.01, unit: 'rad' },
@@ -429,22 +430,24 @@ export default function Controller() {
                                             </Typography>
                                         </Box>
                                     ))}
-
-                                    <Box sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
-                                        <Button variant="contained" size="small" onClick={() => sendArmTrajectory()}>Send Arm</Button>
-                                        <Button variant="outlined" size="small" color="error" onClick={cancelArm}>Cancel</Button>
-                                        <Button variant="outlined" size="small" onClick={() => setArmJoints(PRESET_GO)}>To Go</Button>
-                                        <Button variant="outlined" size="small" onClick={() => setArmJoints(PRESET_NEUTRAL)}>To Neutral</Button>
-                                        <Chip label={armStatus} color={armStatusColor} size="small" sx={{ ml: 1 }} />
-                                    </Box>
                                 </CardContent>
+                                <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1, gap: 0.5, flexWrap: 'wrap' }}>
+                                    <Button size="small" variant="outlined" onClick={() => setArmJoints(PRESET_GO)}>To Go</Button>
+                                    <Button size="small" variant="outlined" onClick={() => setArmJoints(PRESET_NEUTRAL)}>To Neutral</Button>
+                                    <Button size="small" variant="outlined" color="error" onClick={cancelArm}>Cancel</Button>
+                                    <Button size="small" variant="contained" onClick={() => sendArmTrajectory()}>Send Arm</Button>
+                                    <Chip label={armStatus} color={armStatusColor} size="small" />
+                                </CardActions>
                             </Card>
 
                             {/* Gripper */}
                             <Card elevation={2} sx={{ width: 500 }}>
                                 <CardContent>
                                     <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Gripper</Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                        control_msgs/FollowJointTrajectoryAction
+                                    </Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                         <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>hand_motor</Typography>
                                         <Slider
                                             value={gripperPos}
@@ -456,18 +459,21 @@ export default function Controller() {
                                             {gripperPos.toFixed(2)}
                                         </Typography>
                                     </Box>
-                                    <Box sx={{ display: 'flex', gap: 1 }}>
-                                        <Button variant="outlined" size="small" onClick={() => { setGripperPos(1.23); sendGripperTrajectory(1.23); }}>Open</Button>
-                                        <Button variant="outlined" size="small" onClick={() => { setGripperPos(0.0); sendGripperTrajectory(0.0); }}>Close</Button>
-                                        <Button variant="contained" size="small" onClick={() => sendGripperTrajectory()}>Send Gripper</Button>
-                                    </Box>
                                 </CardContent>
+                                <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1 }}>
+                                    <Button size="small" variant="outlined" onClick={() => { setGripperPos(1.23); sendGripperTrajectory(1.23); }}>Open</Button>
+                                    <Button size="small" variant="outlined" onClick={() => { setGripperPos(0.0); sendGripperTrajectory(0.0); }}>Close</Button>
+                                    <Button size="small" variant="contained" onClick={() => sendGripperTrajectory()}>Send Gripper</Button>
+                                </CardActions>
                             </Card>
 
                             {/* Head */}
                             <Card elevation={2} sx={{ width: 500 }}>
                                 <CardContent>
                                     <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Head</Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                        control_msgs/FollowJointTrajectoryAction
+                                    </Typography>
                                     {([
                                         { key: 'pan',  label: 'pan',  min: -3.84, max: 1.75, step: 0.01 },
                                         { key: 'tilt', label: 'tilt', min: -0.61, max: 0.35, step: 0.01 },
@@ -485,15 +491,15 @@ export default function Controller() {
                                             </Typography>
                                         </Box>
                                     ))}
-                                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                                        <Button variant="contained" size="small" onClick={() => sendHeadTrajectory()}>Send Head</Button>
-                                        <Button variant="outlined" size="small" onClick={() => {
-                                            const zero = { pan: 0.0, tilt: 0.0 };
-                                            setHeadJoints(zero);
-                                            sendHeadTrajectory(zero);
-                                        }}>Reset Zero</Button>
-                                    </Box>
                                 </CardContent>
+                                <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1 }}>
+                                    <Button size="small" variant="outlined" onClick={() => {
+                                        const zero = { pan: 0.0, tilt: 0.0 };
+                                        setHeadJoints(zero);
+                                        sendHeadTrajectory(zero);
+                                    }}>Reset Zero</Button>
+                                    <Button size="small" variant="contained" onClick={() => sendHeadTrajectory()}>Send Head</Button>
+                                </CardActions>
                             </Card>
                         </Box>
                     </TabPanel>
