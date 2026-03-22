@@ -1,4 +1,5 @@
-import { Modal, Box, Typography } from '@mui/material';
+import { Modal, Box, Typography, Button } from '@mui/material';
+import CloseIcon from '@mui/icons-material/Close';
 
 const style = {
     position: 'absolute' as 'absolute',
@@ -42,7 +43,7 @@ export function MyModal({ isOpen, onClose, modalString }) {
     );
 }
 
-export function EmergencyModal({ isOpen }) {
+export function EmergencyModal({ isOpen, onClose }) {
     return (
         <>
             <Modal
@@ -51,10 +52,15 @@ export function EmergencyModal({ isOpen }) {
                 aria-describedby="modal-modal-description"
             >
                 <Box sx={{ ...style, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                    <Typography id="modal-modal-title" variant="h3">
-                        Emergency Button Enable
-                    </Typography>
-                    <hr />
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <Typography id="modal-modal-title" variant="h3">
+                            Emergency Button Enable
+                        </Typography>
+                        <Button variant="outlined" color="inherit" size="small" startIcon={<CloseIcon />} onClick={onClose}>
+                            Close
+                        </Button>
+                    </Box>
+                    <hr style={{ width: '100%' }} />
                     <Box sx={{ position: 'relative', width: '90%', height: '90%' }}>
                         <img
                             src="/emergency.gif"

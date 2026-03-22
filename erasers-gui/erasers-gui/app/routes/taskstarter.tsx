@@ -220,6 +220,11 @@ export default function TaskStarter() {
     }
   };
 
+  const handleCheckAllDockerMode = async (taskName: string, mode: 'local' | 'docker') => {
+    const nodeNames = Object.keys(taskData[taskName].programs);
+    await Promise.all(nodeNames.map((nodeName) => handleNodeDockerModeChange(taskName, nodeName, mode)));
+  };
+
   const handleRunAllButtonClick = async (taskName) => {
     const nodeNames = Object.keys(taskData[taskName].programs);
     await Promise.all(nodeNames.map((nodeName) =>
@@ -424,7 +429,13 @@ export default function TaskStarter() {
                   <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary' }}>
                     {taskData[task_key].task.description}
                   </Typography>
-                  <Box sx={{ mb: 2, display: 'flex', gap: 1 }}>
+                  <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center' }}>
+                    <Button variant="outlined" size="small" startIcon={<StorageIcon fontSize="small" />} onClick={() => handleCheckAllDockerMode(task_key, 'docker')} sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                      Check All Docker
+                    </Button>
+                    <Button variant="outlined" size="small" startIcon={<TerminalIcon fontSize="small" />} onClick={() => handleCheckAllDockerMode(task_key, 'local')} sx={{ fontSize: '0.75rem', py: 0.5 }}>
+                      Check All Local
+                    </Button>
                     <Button variant="contained" color="success" startIcon={<PlayArrowIcon />} disabled={!networkIf} onClick={() => handleRunAllButtonClick(task_key)}>
                       RUN ALL
                     </Button>

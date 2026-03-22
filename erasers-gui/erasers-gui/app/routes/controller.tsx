@@ -11,7 +11,11 @@ import {
     Tabs,
     Tab,
     Slider,
+    Accordion,
+    AccordionSummary,
+    AccordionDetails,
 } from '@mui/material';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AppLayout from '~/components/AppLayout';
 import VirtualJoystick from '~/components/joystick/VirtualJoystick';
 import GamepadController from '~/components/joystick/GamepadController';
@@ -86,8 +90,15 @@ interface TabPanelProps {
 function TabPanel(props: TabPanelProps) {
     const { children, value, index, ...other } = props;
     return (
-        <div role="tabpanel" hidden={value !== index} id={`controller-tabpanel-${index}`} aria-labelledby={`controller-tab-${index}`} {...other}>
-            {value === index && <Box sx={{ p: 3 }}>{children}</Box>}
+        <div
+            role="tabpanel"
+            hidden={value !== index}
+            id={`controller-tabpanel-${index}`}
+            aria-labelledby={`controller-tab-${index}`}
+            style={value === index ? { display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 } : undefined}
+            {...other}
+        >
+            {value === index && children}
         </div>
     );
 }
@@ -190,7 +201,7 @@ export default function Controller() {
                     <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>Robot Controller</Typography>
                 </Box>
 
-                <Box sx={{ flex: 1, overflow: 'auto' }}>
+                <Box sx={{ flex: 1, overflowX: 'hidden', overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
                     <Box sx={{ px: 2, pt: 1 }}>
                         <Tabs
                             value={tabValue}
@@ -208,8 +219,8 @@ export default function Controller() {
                     </Box>
 
                     <TabPanel value={tabValue} index={0}>
-                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                            {/* Gamepad status - prominent at top */}
+                        <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, gap: 1 }}>
+                            {/* Gamepad status */}
                             <GamepadController
                                 cmdVel={cmdVelRef.current!}
                                 linearScale={linearScale}
@@ -217,12 +228,14 @@ export default function Controller() {
                                 angularScale={angularScale}
                             />
 
-                            {/* Speed sliders in card */}
-                            <Card elevation={2} sx={{ width: '100%', maxWidth: 520 }}>
-                                <CardContent>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#1565C0' }}>
+                            {/* Velocity Settings collapsed by default */}
+                            <Accordion disableGutters elevation={2}>
+                                <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#1565C0' }}>
                                         Velocity Settings
                                     </Typography>
+                                </AccordionSummary>
+                                <AccordionDetails>
                                     <Typography gutterBottom variant="body2">Linear (前後): {linearScale.toFixed(2)} m/s</Typography>
                                     <Slider value={linearScale} onChange={(_e, v) => setLinearScale(v as number)}
                                         min={0} max={1.0} step={0.05} marks valueLabelDisplay="auto" />
@@ -232,28 +245,28 @@ export default function Controller() {
                                     <Typography gutterBottom variant="body2" sx={{ mt: 1 }}>Angular (回転): {angularScale.toFixed(2)} rad/s</Typography>
                                     <Slider value={angularScale} onChange={(_e, v) => setAngularScale(v as number)}
                                         min={0} max={2.0} step={0.1} marks valueLabelDisplay="auto" />
-                                </CardContent>
-                            </Card>
+                                </AccordionDetails>
+                            </Accordion>
 
-                            {/* Dual virtual joysticks */}
-                            <Box sx={{ display: 'flex', gap: 6, justifyContent: 'center', flexWrap: 'wrap' }}>
-                                <VirtualJoystick
-                                    onMove={handleLeftMove}
-                                    onStop={handleLeftStop}
-                                    label="並進 (Linear X/Y)"
-                                    color="red"
-                                />
-                                <VirtualJoystick
-                                    onMove={handleRightMove}
-                                    onStop={handleRightStop}
-                                    label="回転 (Angular Z)"
-                                    color="blue"
-                                />
+                            {/* Dual virtual joysticks — fill remaining height */}
+                            <Box sx={{ flex: 1, display: 'flex', gap: 2, minHeight: 0 }}>
+                                <Box sx={{ flex: 1, position: 'relative' }}>
+                                    <VirtualJoystick
+                                        onMove={handleLeftMove}
+                                        onStop={handleLeftStop}
+                                        label="並進 (Linear X/Y)"
+                                        color="red"
+                                    />
+                                </Box>
+                                <Box sx={{ flex: 1, position: 'relative' }}>
+                                    <VirtualJoystick
+                                        onMove={handleRightMove}
+                                        onStop={handleRightStop}
+                                        label="回転 (Angular Z)"
+                                        color="blue"
+                                    />
+                                </Box>
                             </Box>
-
-                            <Typography variant="body2" color="text.secondary">
-                                左: 前後・横移動　右: 旋回　物理ゲームパッドは常時有効（左スティックXY→並進, 右スティックX→回転）
-                            </Typography>
                         </Box>
                     </TabPanel>
 

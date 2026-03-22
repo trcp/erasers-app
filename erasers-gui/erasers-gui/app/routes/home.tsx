@@ -54,7 +54,7 @@ export default function Home() {
   return (
     <AppLayout defaultOpen={false}>
       <MyModal isOpen={isModalOpen} onClose={closeModal} modalString={modalString} />
-      <EmergencyModal isOpen={isEmergencyModalOpen} />
+      <EmergencyModal isOpen={isEmergencyModalOpen} onClose={() => setIsEmergencyModalOpen(false)} />
       <ImageModal imageTopicName={imageTopicName} hostName={hostName} />
 
       <main
