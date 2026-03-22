@@ -78,6 +78,32 @@ export default function TaskStarter() {
   const runStatusRef = useRef<any>(null);
   useEffect(() => { runStatusRef.current = runStatus; }, [runStatus]);
 
+  const [srvOnline, setSrvOnline] = useState<boolean>(false);
+  const [srvConfig, setSrvConfig] = useState(
+    () => localStorage.getItem('erasers_server_config') ?? ''
+  );
+
+  useEffect(() => {
+    const check = async () => {
+      try {
+        await fetch(`http://${hostName ?? 'localhost'}:3001/get_task`,
+                    { signal: AbortSignal.timeout(1500) });
+        setSrvOnline(true);
+      } catch {
+        setSrvOnline(false);
+      }
+    };
+    check();
+    const id = setInterval(check, 3000);
+    return () => clearInterval(id);
+  }, []);
+
+  const handleStart = () => {
+    localStorage.setItem('erasers_server_config', srvConfig);
+    window.location.href =
+      `erasers://start?config=${encodeURIComponent(srvConfig)}`;
+  };
+
   useEffect(() => {
     if (!serverIp || !taskData) return;
     const id = setInterval(async () => {
@@ -400,6 +426,45 @@ export default function TaskStarter() {
               {networkIp}
             </Typography>
           )}
+        </Box>
+
+        {/* Server Control */}
+        <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+          <Card variant="outlined" sx={{ maxWidth: 520 }}>
+            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: srvOnline ? 0 : 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, flexGrow: 1 }}>
+                  Task Controller Server
+                </Typography>
+                <Chip
+                  label={srvOnline ? 'Running' : 'Stopped'}
+                  size="small"
+                  sx={{
+                    bgcolor: srvOnline ? '#E8F5E9' : '#F5F5F5',
+                    color: srvOnline ? '#2E7D32' : '#757575',
+                    fontWeight: 600,
+                    '&::before': { content: srvOnline ? '"●"' : '"○"', mr: 0.5 },
+                  }}
+                />
+              </Box>
+              {!srvOnline && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TextField
+                    label="Config"
+                    size="small"
+                    value={srvConfig}
+                    onChange={(e) => setSrvConfig(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleStart(); }}
+                    placeholder="/path/to/config/dir"
+                    sx={{ flexGrow: 1 }}
+                  />
+                  <Button variant="contained" size="small" onClick={handleStart}>
+                    Start Server
+                  </Button>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
         </Box>
 
         <Box sx={{ flex: 1, overflow: 'auto' }}>

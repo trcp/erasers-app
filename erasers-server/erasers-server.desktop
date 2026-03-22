@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Erasers Server Launcher
+Exec=/home/roboworks/erasers-app/erasers-server/start_erasers.sh %u
+Type=Application
+MimeType=x-scheme-handler/erasers;
+NoDisplay=true
+Terminal=false
