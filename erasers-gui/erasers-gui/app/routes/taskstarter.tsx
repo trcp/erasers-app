@@ -5,6 +5,7 @@ import {
   Card,
   CardContent,
   Chip,
+  Divider,
   Tabs,
   Tab,
   Typography,
@@ -34,7 +35,6 @@ import AppLayout from '~/components/AppLayout';
 import { useRos } from '~/scripts/ros';
 import { useTaskStarter } from '~/scripts/taskstarter_context';
 
-const hostName = import.meta.env.VITE_MASTER_HOSTNAME;
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -82,11 +82,13 @@ export default function TaskStarter() {
   const [srvConfig, setSrvConfig] = useState(
     () => localStorage.getItem('erasers_server_config') ?? ''
   );
+  const isLocal = !serverIpInput || serverIpInput === 'localhost' || serverIpInput === '127.0.0.1';
 
   useEffect(() => {
+    const targetIp = serverIpInput || 'localhost';
     const check = async () => {
       try {
-        await fetch(`http://${hostName ?? 'localhost'}:3001/get_task`,
+        await fetch(`http://${targetIp}:3001/get_task`,
                     { signal: AbortSignal.timeout(1500) });
         setSrvOnline(true);
       } catch {
@@ -96,7 +98,7 @@ export default function TaskStarter() {
     check();
     const id = setInterval(check, 3000);
     return () => clearInterval(id);
-  }, []);
+  }, [serverIpInput]);
 
   const handleStart = () => {
     localStorage.setItem('erasers_server_config', srvConfig);
@@ -379,92 +381,122 @@ export default function TaskStarter() {
         <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>Task Starter</Typography>
         </Box>
-        <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-          <TextField
-            label="Server IP"
-            size="small"
-            value={serverIpInput}
-            onChange={(e) => setServerIpInput(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
-            placeholder="192.168.1.10"
-            sx={{ minWidth: 180 }}
-          />
-          <Button variant="contained" startIcon={<RouterIcon />} onClick={handleConnect}>
-            Connect
-          </Button>
-          {connectError && (
-            <Typography variant="body2" color="error">{connectError}</Typography>
-          )}
-          {taskData && !connectError && (
-            <Typography variant="body2" color="success.main">接続済み: {serverIp}:3001</Typography>
-          )}
-        </Box>
 
-        {/* Execution config bar */}
-        <Box sx={{ px: 3, py: 1, borderBottom: '1px solid', borderColor: 'divider', display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', bgcolor: 'grey.50' }}>
-          <StorageIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+        {/* Setup Panel */}
+        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
 
-          <FormControl size="small" sx={{ minWidth: 130 }}>
-            <InputLabel>Network IF</InputLabel>
-            <Select
-              value={networkIf}
-              label="Network IF"
-              onChange={(e) => {
-                const selected = e.target.value;
-                setNetworkIf(selected);
-                setNetworkIp(networkInterfaces.find((i) => i.name === selected)?.ip ?? '');
-                applyExecutionConfig(serverIp, selected);
-              }}
-            >
-              {networkInterfaces.map((iface) => (
-                <MenuItem key={iface.name} value={iface.name}>{iface.name}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-          {networkIp && (
-            <Typography variant="body2" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
-              {networkIp}
+          {/* Task Controller Server */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pr: 3 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              サーバー起動 / Server
             </Typography>
-          )}
-        </Box>
-
-        {/* Server Control */}
-        <Box sx={{ px: 3, py: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
-          <Card variant="outlined" sx={{ maxWidth: 520 }}>
-            <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: srvOnline ? 0 : 1 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, flexGrow: 1 }}>
-                  Task Controller Server
-                </Typography>
-                <Chip
-                  label={srvOnline ? 'Running' : 'Stopped'}
-                  size="small"
-                  sx={{
-                    bgcolor: srvOnline ? '#E8F5E9' : '#F5F5F5',
-                    color: srvOnline ? '#2E7D32' : '#757575',
-                    fontWeight: 600,
-                    '&::before': { content: srvOnline ? '"●"' : '"○"', mr: 0.5 },
-                  }}
-                />
-              </Box>
-              {!srvOnline && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5 }}>
+              このPCでサーバーを起動する場合に使用します
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Chip
+                label={srvOnline ? 'Running' : 'Stopped'}
+                size="small"
+                sx={{
+                  bgcolor: srvOnline ? '#E8F5E9' : '#FAFAFA',
+                  color: srvOnline ? '#2E7D32' : '#9E9E9E',
+                  fontWeight: 700,
+                  border: '1px solid',
+                  borderColor: srvOnline ? '#A5D6A7' : '#E0E0E0',
+                }}
+              />
+              {!srvOnline && isLocal && (
+                <>
                   <TextField
-                    label="Config"
+                    label="Config path"
                     size="small"
                     value={srvConfig}
                     onChange={(e) => setSrvConfig(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleStart(); }}
                     placeholder="/path/to/config/dir"
-                    sx={{ flexGrow: 1 }}
+                    sx={{ width: 220 }}
                   />
                   <Button variant="contained" size="small" onClick={handleStart}>
-                    Start Server
+                    起動
                   </Button>
-                </Box>
+                </>
               )}
-            </CardContent>
-          </Card>
+              {!srvOnline && !isLocal && (
+                <Typography variant="caption" color="text.disabled" sx={{ fontStyle: 'italic' }}>
+                  リモート接続中 — 起動はサーバーPC側で行ってください
+                </Typography>
+              )}
+            </Box>
+          </Box>
+
+          <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+
+          {/* Connect */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pr: 3 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              サーバーに接続 / Connect
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5 }}>
+              サーバーPCのIPアドレスを入力して接続します
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <TextField
+                label="サーバーIP"
+                size="small"
+                value={serverIpInput}
+                onChange={(e) => setServerIpInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
+                placeholder="192.168.1.10"
+                sx={{ width: 160 }}
+              />
+              <Button variant="contained" startIcon={<RouterIcon />} onClick={handleConnect}>
+                接続
+              </Button>
+              {connectError && (
+                <Typography variant="body2" color="error">{connectError}</Typography>
+              )}
+              {taskData && !connectError && (
+                <Chip label={`${serverIp}:3001`} size="small" color="success" variant="outlined" />
+              )}
+            </Box>
+          </Box>
+
+          <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+
+          {/* Network IF */}
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              ネットワーク設定 / Network
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5 }}>
+              タスク実行に使うインターフェースを選択します
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <FormControl size="small" sx={{ minWidth: 130 }}>
+                <InputLabel>Network IF</InputLabel>
+                <Select
+                  value={networkIf}
+                  label="Network IF"
+                  onChange={(e) => {
+                    const selected = e.target.value;
+                    setNetworkIf(selected);
+                    setNetworkIp(networkInterfaces.find((i) => i.name === selected)?.ip ?? '');
+                    applyExecutionConfig(serverIp, selected);
+                  }}
+                >
+                  {networkInterfaces.map((iface) => (
+                    <MenuItem key={iface.name} value={iface.name}>{iface.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              {networkIp && (
+                <Typography variant="body2" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+                  {networkIp}
+                </Typography>
+              )}
+            </Box>
+          </Box>
+
         </Box>
 
         <Box sx={{ flex: 1, overflow: 'auto' }}>
@@ -491,25 +523,30 @@ export default function TaskStarter() {
 
               {Object.keys(taskData).map((task_key, task_index) => (
                 <CustomTabPanel value={tabValue} index={task_index} key={task_index}>
-                  <Typography variant="h6" sx={{ mb: 2, color: 'text.secondary' }}>
-                    {taskData[task_key].task.description}
-                  </Typography>
-                  <Box sx={{ mb: 2, display: 'flex', gap: 1, alignItems: 'center' }}>
-                    <Button variant="outlined" size="small" startIcon={<StorageIcon fontSize="small" />} onClick={() => handleCheckAllDockerMode(task_key, 'docker')} sx={{ fontSize: '0.75rem', py: 0.5 }}>
-                      Check All Docker
-                    </Button>
-                    <Button variant="outlined" size="small" startIcon={<TerminalIcon fontSize="small" />} onClick={() => handleCheckAllDockerMode(task_key, 'local')} sx={{ fontSize: '0.75rem', py: 0.5 }}>
-                      Check All Local
-                    </Button>
-                    <Button variant="contained" color="success" startIcon={<PlayArrowIcon />} disabled={!networkIf} onClick={() => handleRunAllButtonClick(task_key)}>
-                      RUN ALL
-                    </Button>
-                    <Button variant="outlined" color="primary" startIcon={<TerminalIcon />} disabled={!networkIf} onClick={() => handleRunWeztermButtonClick(task_key)}>
-                      Run with Terminal
-                    </Button>
-                    <Button variant="outlined" color="error" startIcon={<StopIcon />} onClick={() => handleKillAllButtonClick(task_key)}>
-                      KILL ALL
-                    </Button>
+                  {/* Task description + bulk controls */}
+                  <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap' }}>
+                    <Typography variant="body1" color="text.secondary">
+                      {taskData[task_key].task.description}
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexShrink: 0 }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>All:</Typography>
+                      <Button variant="outlined" size="small" startIcon={<StorageIcon fontSize="small" />} onClick={() => handleCheckAllDockerMode(task_key, 'docker')}>
+                        Docker
+                      </Button>
+                      <Button variant="outlined" size="small" startIcon={<TerminalIcon fontSize="small" />} onClick={() => handleCheckAllDockerMode(task_key, 'local')}>
+                        Local
+                      </Button>
+                      <Divider orientation="vertical" flexItem />
+                      <Button variant="contained" color="success" size="small" startIcon={<PlayArrowIcon />} disabled={!networkIf} onClick={() => handleRunAllButtonClick(task_key)}>
+                        RUN ALL
+                      </Button>
+                      <Button variant="outlined" color="primary" size="small" startIcon={<TerminalIcon />} disabled={!networkIf} onClick={() => handleRunWeztermButtonClick(task_key)}>
+                        Terminal
+                      </Button>
+                      <Button variant="outlined" color="error" size="small" startIcon={<StopIcon />} onClick={() => handleKillAllButtonClick(task_key)}>
+                        KILL ALL
+                      </Button>
+                    </Box>
                   </Box>
 
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -518,7 +555,7 @@ export default function TaskStarter() {
                       return (
                         <Card
                           key={node_index}
-                          elevation={2}
+                          elevation={isRunning ? 3 : 1}
                           sx={{
                             borderLeft: '4px solid',
                             borderLeftColor: isRunning ? '#1565C0' : '#BDBDBD',
@@ -526,30 +563,44 @@ export default function TaskStarter() {
                           }}
                         >
                           {isRunning && (
-                            <LinearProgress
-                              sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3 }}
-                            />
+                            <LinearProgress sx={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3 }} />
                           )}
-                          <CardContent sx={{ pt: isRunning ? 2.5 : 2 }}>
-                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                              {taskData[task_key].programs[node_key].display_name}
-                            </Typography>
+                          <CardContent sx={{ pt: isRunning ? 2.5 : 2, pb: '12px !important' }}>
+
+                            {/* Title row */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                {taskData[task_key].programs[node_key].display_name}
+                              </Typography>
+                              <Chip
+                                label={isRunning ? 'Running' : 'Stopped'}
+                                size="small"
+                                sx={{
+                                  bgcolor: isRunning ? '#E3F2FD' : '#F5F5F5',
+                                  color: isRunning ? '#1565C0' : '#9E9E9E',
+                                  fontWeight: 700,
+                                  border: '1px solid',
+                                  borderColor: isRunning ? '#90CAF9' : '#E0E0E0',
+                                }}
+                              />
+                            </Box>
+
+                            {/* Description */}
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                               {taskData[task_key].programs[node_key].description}
                             </Typography>
+
+                            {/* Command chip */}
                             <Chip
                               label={`$ ${taskData[task_key].programs[node_key].command.template}`}
                               size="small"
-                              sx={{
-                                fontFamily: 'monospace',
-                                bgcolor: '#F5F5F5',
-                                border: '1px solid #E0E0E0',
-                                mb: 1,
-                              }}
+                              sx={{ fontFamily: 'monospace', bgcolor: '#F5F5F5', border: '1px solid #E0E0E0', mb: 1 }}
                             />
-                            <Box>
-                              {Object.keys(taskData[task_key].programs[node_key].command.variables).length > 0 && (
-                                Object.keys(taskData[task_key].programs[node_key].command.variables).map((opt_key, opt_index) => (
+
+                            {/* Option variables */}
+                            {Object.keys(taskData[task_key].programs[node_key].command.variables).length > 0 && (
+                              <Box sx={{ mb: 1 }}>
+                                {Object.keys(taskData[task_key].programs[node_key].command.variables).map((opt_key, opt_index) => (
                                   <div key={opt_index}>
                                     <OptionVariables
                                       task_key={task_key}
@@ -562,89 +613,103 @@ export default function TaskStarter() {
                                       nodeRunStatus={runStatus}
                                     />
                                   </div>
-                                ))
-                              )}
-                            </Box>
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-                              <ToggleButtonGroup
-                                value={nodeDockerMode[task_key]?.[node_key] ? 'docker' : 'local'}
-                                exclusive
-                                size="small"
-                                onChange={(_e, val) => {
-                                  if (!val) return;
-                                  handleNodeDockerModeChange(task_key, node_key, val);
-                                }}
-                              >
-                                <ToggleButton value="local">Local</ToggleButton>
-                                <ToggleButton value="docker">Docker</ToggleButton>
-                              </ToggleButtonGroup>
-                              {nodeDockerMode[task_key]?.[node_key] && (
-                                <TextField
-                                  label="compose.yaml"
+                                ))}
+                              </Box>
+                            )}
+
+                            <Divider sx={{ my: 1 }} />
+
+                            {/* Settings + Actions row */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', justifyContent: 'space-between' }}>
+
+                              {/* Settings (left) */}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                                <ToggleButtonGroup
+                                  value={nodeDockerMode[task_key]?.[node_key] ? 'docker' : 'local'}
+                                  exclusive
                                   size="small"
-                                  value={nodeComposePath[task_key]?.[node_key] ?? ''}
-                                  onChange={(e) =>
-                                    setNodeComposePath((prev) => ({
-                                      ...prev,
-                                      [task_key]: { ...prev[task_key], [node_key]: e.target.value },
-                                    }))
-                                  }
-                                  onBlur={() => handleNodeComposePathChange(task_key, node_key, nodeComposePath[task_key]?.[node_key] ?? '')}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleNodeComposePathChange(task_key, node_key, nodeComposePath[task_key]?.[node_key] ?? '');
+                                  onChange={(_e, val) => {
+                                    if (!val) return;
+                                    handleNodeDockerModeChange(task_key, node_key, val);
                                   }}
-                                  sx={{ minWidth: 260 }}
-                                />
-                              )}
-                              <FormControlLabel
-                                label="Debug"
-                                control={
-                                  <Checkbox
+                                >
+                                  <ToggleButton value="local">Local</ToggleButton>
+                                  <ToggleButton value="docker">Docker</ToggleButton>
+                                </ToggleButtonGroup>
+                                {nodeDockerMode[task_key]?.[node_key] && (
+                                  <TextField
+                                    label="compose.yaml"
                                     size="small"
-                                    checked={debugChecked[task_index][node_index]}
-                                    onChange={(e) => handleChangeDebug(e, task_index, node_index)}
+                                    value={nodeComposePath[task_key]?.[node_key] ?? ''}
+                                    onChange={(e) =>
+                                      setNodeComposePath((prev) => ({
+                                        ...prev,
+                                        [task_key]: { ...prev[task_key], [node_key]: e.target.value },
+                                      }))
+                                    }
+                                    onBlur={() => handleNodeComposePathChange(task_key, node_key, nodeComposePath[task_key]?.[node_key] ?? '')}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleNodeComposePathChange(task_key, node_key, nodeComposePath[task_key]?.[node_key] ?? '');
+                                    }}
+                                    sx={{ minWidth: 240 }}
                                   />
-                                }
-                              />
-                              <Button
-                                variant="contained"
-                                color="success"
-                                size="small"
-                                startIcon={<PlayArrowIcon />}
-                                disabled={!networkIf}
-                                onClick={() => handleRunButtonClick(task_key, node_key, debugChecked[task_index][node_index], optionVariables)}
-                              >
-                                RUN
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                color="error"
-                                size="small"
-                                startIcon={<StopIcon />}
-                                onClick={() => handleKillButtonClick(task_key, node_key)}
-                              >
-                                KILL
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                color="primary"
-                                size="small"
-                                startIcon={<TerminalIcon />}
-                                disabled={!networkIf}
-                                onClick={() => handleRunWithTerminalButtonClick(task_key, node_key)}
-                              >
-                                RUN WITH TERMINAL
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                color="inherit"
-                                size="small"
-                                startIcon={<ArticleIcon />}
-                                onClick={() => handleGetLogButtonClick(task_key, node_key)}
-                              >
-                                LOG
-                              </Button>
+                                )}
+                                <FormControlLabel
+                                  label="Debug"
+                                  control={
+                                    <Checkbox
+                                      size="small"
+                                      checked={debugChecked[task_index][node_index]}
+                                      onChange={(e) => handleChangeDebug(e, task_index, node_index)}
+                                    />
+                                  }
+                                />
+                              </Box>
+
+                              {/* Actions (right) */}
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Button
+                                  variant="contained"
+                                  color="success"
+                                  size="small"
+                                  startIcon={<PlayArrowIcon />}
+                                  disabled={!networkIf}
+                                  onClick={() => handleRunButtonClick(task_key, node_key, debugChecked[task_index][node_index], optionVariables)}
+                                >
+                                  RUN
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  color="error"
+                                  size="small"
+                                  startIcon={<StopIcon />}
+                                  onClick={() => handleKillButtonClick(task_key, node_key)}
+                                >
+                                  KILL
+                                </Button>
+                                <Divider orientation="vertical" flexItem />
+                                <Button
+                                  variant="outlined"
+                                  color="primary"
+                                  size="small"
+                                  startIcon={<TerminalIcon />}
+                                  disabled={!networkIf}
+                                  onClick={() => handleRunWithTerminalButtonClick(task_key, node_key)}
+                                >
+                                  Terminal
+                                </Button>
+                                <Button
+                                  variant="outlined"
+                                  color="inherit"
+                                  size="small"
+                                  startIcon={<ArticleIcon />}
+                                  onClick={() => handleGetLogButtonClick(task_key, node_key)}
+                                >
+                                  Log
+                                </Button>
+                              </Box>
                             </Box>
+
                           </CardContent>
                         </Card>
                       );
