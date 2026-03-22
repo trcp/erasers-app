@@ -14,6 +14,7 @@ import {
     Accordion,
     AccordionSummary,
     AccordionDetails,
+    Chip,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AppLayout from '~/components/AppLayout';
@@ -153,6 +154,118 @@ export default function Controller() {
     const [lateralScale, setLateralScale] = useState(0.5);
     const [angularScale, setAngularScale] = useState(1.0);
 
+    // Arm tab state
+    const [armJoints, setArmJoints] = useState({ arm_lift: 0.0, arm_flex: 0.0, arm_roll: 0.0, wrist_flex: -1.57, wrist_roll: 0.0 });
+    const [gripperPos, setGripperPos] = useState(0.5);
+    const [headJoints, setHeadJoints] = useState({ pan: 0.0, tilt: 0.0 });
+    const [motionTime, setMotionTime] = useState(3.0);
+    const [armStatus, setArmStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+
+    const armAcRef = useRef<ROSLIB.ActionClient | null>(null);
+    const gripperAcRef = useRef<ROSLIB.ActionClient | null>(null);
+    const headAcRef = useRef<ROSLIB.ActionClient | null>(null);
+
+    // Reset ActionClients when ros changes
+    useEffect(() => {
+        armAcRef.current = null;
+        gripperAcRef.current = null;
+        headAcRef.current = null;
+    }, [ros]);
+
+    const PRESET_GO      = { arm_lift: 0.0, arm_flex: 0.0, arm_roll: -1.57, wrist_flex: -1.57, wrist_roll: 0.0 };
+    const PRESET_NEUTRAL = { arm_lift: 0.0, arm_flex: 0.0,  arm_roll: 0.0,   wrist_flex: -1.57, wrist_roll: 0.0 };
+
+    const sendArmTrajectory = (joints = armJoints) => {
+        if (!ros) return;
+        if (!armAcRef.current) {
+            armAcRef.current = new ROSLIB.ActionClient({
+                ros,
+                serverName: '/hsrb/arm_trajectory_controller/follow_joint_trajectory',
+                actionName: 'control_msgs/FollowJointTrajectoryAction',
+            });
+        }
+        const goal = new ROSLIB.Goal({
+            actionClient: armAcRef.current,
+            goalMessage: {
+                trajectory: {
+                    joint_names: ['arm_lift_joint', 'arm_flex_joint', 'arm_roll_joint', 'wrist_flex_joint', 'wrist_roll_joint'],
+                    points: [{
+                        positions: [joints.arm_lift, joints.arm_flex, joints.arm_roll, joints.wrist_flex, joints.wrist_roll],
+                        velocities: [0, 0, 0, 0, 0],
+                        time_from_start: { secs: Math.floor(motionTime), nsecs: 0 },
+                    }],
+                },
+            },
+        });
+        goal.on('result', () => setArmStatus('done'));
+        goal.on('feedback', () => setArmStatus('running'));
+        setArmStatus('running');
+        goal.send();
+    };
+
+    const sendGripperTrajectory = (pos = gripperPos) => {
+        if (!ros) return;
+        if (!gripperAcRef.current) {
+            gripperAcRef.current = new ROSLIB.ActionClient({
+                ros,
+                serverName: '/hsrb/gripper_controller/follow_joint_trajectory',
+                actionName: 'control_msgs/FollowJointTrajectoryAction',
+            });
+        }
+        const goal = new ROSLIB.Goal({
+            actionClient: gripperAcRef.current,
+            goalMessage: {
+                trajectory: {
+                    joint_names: ['hand_motor_joint'],
+                    points: [{
+                        positions: [pos],
+                        velocities: [0],
+                        time_from_start: { secs: Math.floor(motionTime), nsecs: 0 },
+                    }],
+                },
+            },
+        });
+        goal.send();
+    };
+
+    const sendHeadTrajectory = (joints = headJoints) => {
+        if (!ros) return;
+        if (!headAcRef.current) {
+            headAcRef.current = new ROSLIB.ActionClient({
+                ros,
+                serverName: '/hsrb/head_trajectory_controller/follow_joint_trajectory',
+                actionName: 'control_msgs/FollowJointTrajectoryAction',
+            });
+        }
+        const goal = new ROSLIB.Goal({
+            actionClient: headAcRef.current,
+            goalMessage: {
+                trajectory: {
+                    joint_names: ['head_pan_joint', 'head_tilt_joint'],
+                    points: [{
+                        positions: [joints.pan, joints.tilt],
+                        velocities: [0, 0],
+                        time_from_start: { secs: Math.floor(motionTime), nsecs: 0 },
+                    }],
+                },
+            },
+        });
+        goal.send();
+    };
+
+    const cancelArm = () => {
+        if (!ros) return;
+        const cancelTopic = new ROSLIB.Topic({
+            ros,
+            name: '/hsrb/arm_trajectory_controller/follow_joint_trajectory/cancel',
+            messageType: 'actionlib_msgs/GoalID',
+        });
+        cancelTopic.publish(new ROSLIB.Message({}));
+        setArmStatus('idle');
+    };
+
+    const armStatusColor = armStatus === 'running' ? 'primary' : armStatus === 'done' ? 'success' : armStatus === 'error' ? 'error' : 'default';
+
     const velRef = useRef({ lx: 0, ly: 0, az: 0 });
     const publishIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -271,17 +384,118 @@ export default function Controller() {
                     </TabPanel>
 
                     <TabPanel value={tabValue} index={1}>
-                        <Grid container spacing={1} columns={4} sx={{ alignItems: 'center', justifyContent: 'center' }}>
-                            <Grid>
-                                <CardTemplate msg={twist} pubFunc={cmdVelRef.current} />
-                            </Grid>
-                            <Grid>
-                                <CardTemplate msg={pose_stamped} pubFunc={nav2d.current} />
-                            </Grid>
-                            <Grid>
-                                <CardTemplate msg={voice} pubFunc={ttsus.current} />
-                            </Grid>
-                        </Grid>
+                        <Box sx={{ p: 2, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start' }}>
+                            {/* Existing topic cards */}
+                            <CardTemplate msg={twist} pubFunc={cmdVelRef.current} />
+                            <CardTemplate msg={pose_stamped} pubFunc={nav2d.current} />
+                            <CardTemplate msg={voice} pubFunc={ttsus.current} />
+
+                            {/* Arm Joints */}
+                            <Card elevation={2} sx={{ width: 500 }}>
+                                <CardContent>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Arm Joints</Typography>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Typography variant="body2">Motion Time:</Typography>
+                                            <TextField
+                                                size="small"
+                                                type="number"
+                                                value={motionTime}
+                                                onChange={(e) => setMotionTime(Number(e.target.value))}
+                                                inputProps={{ min: 0.1, step: 0.5 }}
+                                                sx={{ width: 80 }}
+                                            />
+                                            <Typography variant="body2">s</Typography>
+                                        </Box>
+                                    </Box>
+
+                                    {([
+                                        { key: 'arm_lift',   label: 'arm_lift',   min: 0.00,  max: 0.69, step: 0.01, unit: 'm' },
+                                        { key: 'arm_flex',   label: 'arm_flex',   min: -2.62, max: 0.00, step: 0.01, unit: 'rad' },
+                                        { key: 'arm_roll',   label: 'arm_roll',   min: -2.09, max: 3.84, step: 0.01, unit: 'rad' },
+                                        { key: 'wrist_flex', label: 'wrist_flex', min: -1.92, max: 1.22, step: 0.01, unit: 'rad' },
+                                        { key: 'wrist_roll', label: 'wrist_roll', min: -1.92, max: 3.84, step: 0.01, unit: 'rad' },
+                                    ] as const).map(({ key, label, min, max, step, unit }) => (
+                                        <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                            <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>{label}</Typography>
+                                            <Slider
+                                                value={armJoints[key]}
+                                                min={min} max={max} step={step}
+                                                onChange={(_e, v) => setArmJoints(prev => ({ ...prev, [key]: v as number }))}
+                                                sx={{ flex: 1 }}
+                                            />
+                                            <Typography variant="body2" sx={{ width: 80, textAlign: 'right', flexShrink: 0 }}>
+                                                {armJoints[key].toFixed(2)} {unit}
+                                            </Typography>
+                                        </Box>
+                                    ))}
+
+                                    <Box sx={{ display: 'flex', gap: 1, mt: 1, alignItems: 'center' }}>
+                                        <Button variant="contained" size="small" onClick={() => sendArmTrajectory()}>Send Arm</Button>
+                                        <Button variant="outlined" size="small" color="error" onClick={cancelArm}>Cancel</Button>
+                                        <Button variant="outlined" size="small" onClick={() => setArmJoints(PRESET_GO)}>To Go</Button>
+                                        <Button variant="outlined" size="small" onClick={() => setArmJoints(PRESET_NEUTRAL)}>To Neutral</Button>
+                                        <Chip label={armStatus} color={armStatusColor} size="small" sx={{ ml: 1 }} />
+                                    </Box>
+                                </CardContent>
+                            </Card>
+
+                            {/* Gripper */}
+                            <Card elevation={2} sx={{ width: 500 }}>
+                                <CardContent>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Gripper</Typography>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                        <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>hand_motor</Typography>
+                                        <Slider
+                                            value={gripperPos}
+                                            min={0.0} max={1.23} step={0.01}
+                                            onChange={(_e, v) => setGripperPos(v as number)}
+                                            sx={{ flex: 1 }}
+                                        />
+                                        <Typography variant="body2" sx={{ width: 60, textAlign: 'right', flexShrink: 0 }}>
+                                            {gripperPos.toFixed(2)}
+                                        </Typography>
+                                    </Box>
+                                    <Box sx={{ display: 'flex', gap: 1 }}>
+                                        <Button variant="outlined" size="small" onClick={() => { setGripperPos(1.23); sendGripperTrajectory(1.23); }}>Open</Button>
+                                        <Button variant="outlined" size="small" onClick={() => { setGripperPos(0.0); sendGripperTrajectory(0.0); }}>Close</Button>
+                                        <Button variant="contained" size="small" onClick={() => sendGripperTrajectory()}>Send Gripper</Button>
+                                    </Box>
+                                </CardContent>
+                            </Card>
+
+                            {/* Head */}
+                            <Card elevation={2} sx={{ width: 500 }}>
+                                <CardContent>
+                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Head</Typography>
+                                    {([
+                                        { key: 'pan',  label: 'pan',  min: -3.84, max: 1.75, step: 0.01 },
+                                        { key: 'tilt', label: 'tilt', min: -0.61, max: 0.35, step: 0.01 },
+                                    ] as const).map(({ key, label, min, max, step }) => (
+                                        <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                            <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>{label}</Typography>
+                                            <Slider
+                                                value={headJoints[key]}
+                                                min={min} max={max} step={step}
+                                                onChange={(_e, v) => setHeadJoints(prev => ({ ...prev, [key]: v as number }))}
+                                                sx={{ flex: 1 }}
+                                            />
+                                            <Typography variant="body2" sx={{ width: 80, textAlign: 'right', flexShrink: 0 }}>
+                                                {headJoints[key].toFixed(2)} rad
+                                            </Typography>
+                                        </Box>
+                                    ))}
+                                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                        <Button variant="contained" size="small" onClick={() => sendHeadTrajectory()}>Send Head</Button>
+                                        <Button variant="outlined" size="small" onClick={() => {
+                                            const zero = { pan: 0.0, tilt: 0.0 };
+                                            setHeadJoints(zero);
+                                            sendHeadTrajectory(zero);
+                                        }}>Reset Zero</Button>
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        </Box>
                     </TabPanel>
                 </Box>
             </Box>

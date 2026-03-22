@@ -405,7 +405,7 @@ export default function TaskStarter() {
         <Box sx={{ flex: 1, overflow: 'auto' }}>
           {taskData && debugChecked && runStatus && Object.keys(taskData).length > 0 ? (
             <>
-              <Box sx={{ px: 2, pt: 1 }}>
+              <Box sx={{ px: 2, pt: 1, pb: 1, position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Tabs
                   value={tabValue}
                   onChange={handleChangeTaskTab}

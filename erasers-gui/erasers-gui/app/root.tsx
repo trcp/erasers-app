@@ -5,10 +5,12 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLocation,
 } from "react-router";
 
 import type { Route } from "./+types/root";
 import "./globals.css";
+import MapCreator from "~/routes/mapcreator";
 
 import createCache from "@emotion/cache";
 import { RosProvider } from "~/scripts/ros";
@@ -94,7 +96,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  const location = useLocation();
+  const isMapPage = location.pathname === '/mapcreator';
+  return (
+    <>
+      <div style={{ display: isMapPage ? 'flex' : 'none', height: '100vh', width: '100%', flexDirection: 'column', overflow: 'hidden' }}>
+        <MapCreator />
+      </div>
+      {!isMapPage && <Outlet />}
+    </>
+  );
 }
 
 export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {

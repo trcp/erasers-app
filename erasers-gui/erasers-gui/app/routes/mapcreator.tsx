@@ -335,6 +335,11 @@ export default function MapCreator() {
         setActivePoseTopic(poseTopicInput.trim());
     };
 
+    const handleUnsubscribe = () => {
+        setActiveMaptopic('');
+        setActivePoseTopic('');
+    };
+
     useEffect(() => {
         if (!ros || !activeMaptopic || !viewerDivRef.current) return;
         const ROS2D = (window as any).ROS2D;
@@ -353,7 +358,7 @@ export default function MapCreator() {
         if (createjs) {
             const marker = new createjs.Container();
             const circle = new createjs.Shape();
-            circle.graphics.beginFill('rgba(220,50,50,0.85)').drawCircle(0, 0, 0.3);
+            circle.graphics.beginFill('rgba(220,50,50,0.85)').drawCircle(0, 0, 0.1);
             const arrow = new createjs.Shape();
             arrow.graphics.setStrokeStyle(0.08).beginStroke('#FFD700').moveTo(0, 0).lineTo(0.7, 0);
             marker.addChild(circle, arrow);
@@ -696,9 +701,12 @@ export default function MapCreator() {
                             </Box>
                         </Box>
 
-                        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', pt: 0.5 }}>
-                            <Button variant="contained" onClick={handleSubscribe}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', gap: 0.5, pt: 0.5 }}>
+                            <Button variant="contained" onClick={handleSubscribe} disabled={!!activeMaptopic}>
                                 Subscribe
+                            </Button>
+                            <Button variant="outlined" color="error" onClick={handleUnsubscribe} disabled={!activeMaptopic}>
+                                Unsubscribe
                             </Button>
                         </Box>
 
