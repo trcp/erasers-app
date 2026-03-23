@@ -26,7 +26,7 @@ import { useRos } from '~/scripts/ros';
 
 const TField = ({ data, allKeys = [] }) => {
     const packData = (e, k) => {
-        data[k] = Number(e.target.value);
+        data[k] = typeof data[k] === 'string' ? e.target.value : Number(e.target.value);
     };
 
     return (
