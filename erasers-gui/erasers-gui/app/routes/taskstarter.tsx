@@ -437,7 +437,7 @@ export default function TaskStarter() {
               サーバーに接続 / Connect
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5 }}>
-              サーバーPCのIPアドレスを入力して接続します
+              TASKSTARTERが起動しているPCのIPアドレスを入力して接続します
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <TextField
@@ -469,7 +469,7 @@ export default function TaskStarter() {
               ネットワーク設定 / Network
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5 }}>
-              タスク実行に使うインターフェースを選択します
+              タスク実行に使うPCのインターフェースを選択して，ROS_IPをセットします
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <FormControl size="small" sx={{ minWidth: 130 }}>
