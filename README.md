@@ -1,49 +1,98 @@
-# eR@sers GUI
-This is a web-based robot management and data visualization tool.
+# erasers-app
 
-## Installation
-### Robot
-```bash
-$ ssh administrator@hsrb.local
-$ git clone https://github.com/trcp/erasers-app.git
-$ cd ~/erasers-app/erasers-gui && ./build.sh
-$ sudo cp ~/erasers-app/erasers-gui/erasers.gui.service /etc/systemd/system
-$ sudo systemctl enable erasers.gui.service
+ロボット管理・データ可視化・タスク実行のための Web アプリケーション。
+
+## 構成
+
 ```
-Automatically launch chromium gui when the HSR is powerd on. 
-1. Search for the Startup Application.
-![IMG20230626213206](https://github.com/ry0hei-kobayashi/erasers-app-v2/assets/110576744/a470643d-6770-41b9-b0e2-43b2f2d1d745)
-
-2. Add config for erasers-gui following below.
-![IMG20230626213223](https://github.com/ry0hei-kobayashi/erasers-app-v2/assets/110576744/876b2456-0e94-43ef-bc42-d0a3cfd8a9a6)
-
-Fill the below command in "Command(M)".  
-```bash
-/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
+erasers-app/
+├── erasers-gui/      # Web フロントエンド（React Router v7）
+└── erasers-server/   # タスクコントローラーサーバー（FastAPI, port 3001）
 ```
-3. Remove the Check mark to prevent Toyota UI from starting automatically.
-![IMG20230626213217](https://github.com/ry0hei-kobayashi/erasers-app-v2/assets/110576744/873dadde-3b1f-4fa5-97e6-1ef08e0fd4f0)
 
+---
 
+## erasers-gui
 
-### Client PC
+ロボットの **HSR** 上で動作する Web GUI。
+Docker コンテナとして port 3000 で提供される。
+
+### インストール（HSR 側）
+
 ```bash
-$ pip install pyinstaller
-$ git clone https://github.com/trcp/erasers-app.git
-$ cd erasers-app/erasers-server/ && ./build.sh
+ssh administrator@hsrb.local
+git clone https://github.com/trcp/erasers-app.git
+cd ~/erasers-app/erasers-gui && ./install.sh
 ```
-## How to use
-If connected to the same network as the robot, you can access it by hitting the following URL from web browser.  
 
-http://{robot_ip or robot hostname}:3000
+`install.sh` は以下を行う：
 
-- /dashboard  
-Task starter.
-You need to launch "Task Starter(erasers-server)" in your Client PC
-- /data  
-Show robot topic data.
-- /controller  
-Publish data from browser.
-- /mapcreator  
-create map location data.
-  
+1. Docker イメージ `erasers:gui` をビルド
+2. `erasers.gui.service` を systemd に登録・有効化
+3. ログイン時に Chromium がキオスクモードで自動起動するよう autostart を設定
+
+### アクセス
+
+ロボットと同一ネットワーク上のブラウザから：
+
+```
+http://<robot_ip>:3000
+```
+
+### ページ一覧
+
+| URL | 説明 |
+|-----|------|
+| `/taskstarter` | タスク起動・管理（erasers-server と連携） |
+| `/data` | ロボットのトピックデータ表示 |
+| `/controller` | ブラウザからのデータ送信 |
+| `/mapcreator` | マップ位置データの作成 |
+
+---
+
+## erasers-server
+
+タスクを**実際に走らせる PC**（クライアント PC）にインストールして使用する。
+タブレットやスマートフォンにはインストール不要。
+
+### インストール（クライアント PC 側）
+
+```bash
+git clone https://github.com/trcp/erasers-app.git
+cd erasers-app/erasers-server && ./install.sh
+```
+
+`install.sh` は以下を行う：
+
+1. Python パッケージのインストール（`fastapi`, `uvicorn`, `pydantic`, `lupa`）
+2. スクリプトへの実行権限付与
+3. `erasers://` カスタム URL スキームの登録
+
+### 仕組み
+
+```
+GUI の "起動" ボタンクリック
+  → window.location.href = "erasers://start?config=/path/to/config"
+  → Chrome: 「外部アプリを開きますか？」ダイアログ
+  → xdg-open → erasers-server.desktop → start_erasers.sh
+  → python3 erasers_task_controller_server.py --config /path/to/config &
+```
+
+### 使い方
+
+1. ブラウザで erasers-gui の **Task Starter** ページを開く
+2. **サーバーに接続 / Connect** の「サーバーIP」欄にサーバー PC の IP アドレスを入力（同一 PC の場合は `localhost`）
+3. 同一 PC の場合：**サーバー起動 / Server** の Config 欄にタスク設定ディレクトリのパスを入力し「起動」をクリック
+4. ステータスが **Running** に変わったら接続完了
+
+### 手動起動
+
+```bash
+python3 erasers_task_controller_server.py --config /path/to/config
+```
+
+### ログ確認
+
+```bash
+tail -f /tmp/erasers_server.log
+```
