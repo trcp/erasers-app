@@ -1,6 +1,0 @@
-[Desktop Entry]
-Name=TaskStarter
-Comment=erasers-task-starter
-Exec=/usr/local/bin/erasers-task-controller
-Type=Application
-Icon=/usr/share/pixmaps/taskstarter.png
