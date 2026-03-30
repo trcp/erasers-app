@@ -1,4 +1,10 @@
 #!/bin/bash
+
+# Load export lines from .bashrc (bypasses interactive-only guard)
+if [ -f "$HOME/.bashrc" ]; then
+    eval "$(grep -E '^export ' "$HOME/.bashrc" | grep -v '#')"
+fi
+
 # 引数: erasers://start?config=/path/to/config
 URL="$1"
 
