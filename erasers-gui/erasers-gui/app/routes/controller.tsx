@@ -274,6 +274,7 @@ export default function Controller() {
         publishIntervalRef.current = setInterval(() => {
             if (!cmdVelRef.current) return;
             const { lx, ly, az } = velRef.current;
+            if (lx === 0 && ly === 0 && az === 0) return;
             cmdVelRef.current.publish(new ROSLIB.Message({
                 linear:  { x: lx, y: ly, z: 0.0 },
                 angular: { x: 0.0, y: 0.0, z: az }

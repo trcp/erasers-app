@@ -67,11 +67,13 @@ export default function GamepadController({ cmdVel, linearScale, lateralScale, a
                     setStatus('connected');
                 }
 
-                const twist = new ROSLIB.Message({
-                    linear:  { x: linear_x,  y: linear_y, z: 0.0 },
-                    angular: { x: 0.0, y: 0.0, z: angular_z }
-                });
-                cmdVel.publish(twist);
+                if (isActive) {
+                    const twist = new ROSLIB.Message({
+                        linear:  { x: linear_x,  y: linear_y, z: 0.0 },
+                        angular: { x: 0.0, y: 0.0, z: angular_z }
+                    });
+                    cmdVel.publish(twist);
+                }
             }
 
             rafRef.current = requestAnimationFrame(loop);
