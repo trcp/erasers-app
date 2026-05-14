@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useRos } from '~/scripts/ros';
+import { ROBOT_PROFILES, findProfile } from '~/scripts/robotProfiles';
 import ROSLIB from 'roslib';
 import Box from '@mui/material/Box';
 import Chip from '@mui/material/Chip';
@@ -10,6 +11,8 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogTitle from '@mui/material/DialogTitle';
 import Drawer from '@mui/material/Drawer';
 import IconButton from '@mui/material/IconButton';
+import MenuItem from '@mui/material/MenuItem';
+import Select from '@mui/material/Select';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -50,22 +53,24 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(defaultOpen);
-  const { ros, rosConnected, hostname, setHostname } = useRos();
+  const {
+    ros, rosConnected, hostname, setHostname,
+    robotProfile, setRobotProfileId,
+  } = useRos();
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [inputValue, setInputValue] = useState(hostname);
   const [batteryLevel, setBatteryLevel] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!ros) return;
-    const batterySub = new ROSLIB.Topic({ ros, name: '/hsrb/battery_state', messageType: 'tmc_msgs/BatteryState' });
+    if (!ros || !robotProfile.batteryTopic) return;
+    const batterySub = new ROSLIB.Topic({ ros, name: robotProfile.batteryTopic, messageType: 'tmc_msgs/BatteryState' });
     batterySub.subscribe((message: any) => {
       const level = message?.power ?? null;
       if (level !== null) setBatteryLevel(Math.round(Number(level)));
     });
     return () => batterySub.unsubscribe();
-  }, [ros]);
-
+  }, [ros, robotProfile.batteryTopic]);
 
   const handleOpenDialog = () => {
     setInputValue(hostname);
@@ -182,7 +187,6 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
           </Box>
         </Tooltip>
 
-
         {/* ROS connection indicator (clickable) */}
         <Tooltip title="ROS Settings" placement="right">
           <Box
@@ -224,12 +228,18 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
       </Box>
 
       {/* ROS Settings Dialog */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
+      <Dialog
+        open={dialogOpen}
+        onClose={() => setDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{ sx: { maxHeight: '90vh' } }}
+      >
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <WifiIcon fontSize="small" />
           ROS Connection Settings
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ overflowY: 'auto' }}>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Current: <code>{hostname}</code> — {rosConnected ? '🟢 Connected' : '🔴 Disconnected'}
           </Typography>
@@ -259,6 +269,21 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
             size="small"
             placeholder="e.g. 192.168.1.100"
           />
+
+          <Typography variant="caption" color="text.secondary" sx={{ mt: 2, mb: 1, display: 'block' }}>
+            Robot Type
+          </Typography>
+          <Select
+            value={robotProfile.id}
+            onChange={(e) => setRobotProfileId(e.target.value)}
+            size="small"
+            fullWidth
+          >
+            {ROBOT_PROFILES.map((p) => (
+              <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+            ))}
+          </Select>
+
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDialogOpen(false)}>Cancel</Button>

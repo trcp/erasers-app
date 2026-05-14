@@ -80,7 +80,7 @@ export default function TaskStarter() {
 
   const [srvOnline, setSrvOnline] = useState<boolean>(false);
   const [srvConfig, setSrvConfig] = useState(
-    () => localStorage.getItem('erasers_server_config') ?? ''
+    () => (typeof window !== 'undefined' ? localStorage.getItem('erasers_server_config') : null) ?? ''
   );
   const isLocal = !serverIpInput || serverIpInput === 'localhost' || serverIpInput === '127.0.0.1';
 

@@ -93,7 +93,7 @@ function renderMessage(_ct: CustomTopic, message: any): React.ReactNode {
 export default function DataViewer() {
   const [topics, setTopics] = useState<CustomTopic[]>(() => {
     try {
-      const saved = localStorage.getItem(CUSTOM_TOPICS_KEY);
+      const saved = typeof window !== 'undefined' ? localStorage.getItem(CUSTOM_TOPICS_KEY) : null;
       return saved ? JSON.parse(saved) : [];
     } catch { return []; }
   });

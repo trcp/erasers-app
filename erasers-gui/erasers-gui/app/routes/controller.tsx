@@ -6,7 +6,6 @@ import {
     Box,
     CardActions,
     Button,
-    Grid,
     TextField,
     Tabs,
     Tab,
@@ -15,6 +14,8 @@ import {
     AccordionSummary,
     AccordionDetails,
     Chip,
+    Select,
+    MenuItem,
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AppLayout from '~/components/AppLayout';
@@ -23,6 +24,7 @@ import GamepadController from '~/components/joystick/GamepadController';
 
 import ROSLIB from 'roslib';
 import { useRos } from '~/scripts/ros';
+import { ROBOT_PROFILES, type RobotProfile, type TopicOverrides } from '~/scripts/robotProfiles';
 
 const TField = ({ data, allKeys = [] }) => {
     const packData = (e, k) => {
@@ -105,31 +107,50 @@ function TabPanel(props: TabPanelProps) {
     );
 }
 
+function toTopicInputs(profile: RobotProfile): Record<string, string> {
+    return {
+        cmdVelTopic:       profile.cmdVelTopic,
+        navGoalTopic:      profile.navGoalTopic,
+        ttsTopic:          profile.ttsTopic ?? '',
+        batteryTopic:      profile.batteryTopic ?? '',
+        armServerName:     profile.arm?.serverName ?? '',
+        gripperServerName: profile.gripper?.serverName ?? '',
+        headServerName:    profile.head?.serverName ?? '',
+    };
+}
+
 export default function Controller() {
-    const { ros } = useRos();
+    const { ros, robotProfile, setRobotProfileId, setTopicOverrides, resetTopicOverrides } = useRos();
     const cmdVelRef = useRef<ROSLIB.Topic | null>(null);
-    const nav2d = useRef<ROSLIB.Topic | null>(null);
-    const ttsus = useRef<ROSLIB.Topic | null>(null);
+    const nav2dRef = useRef<ROSLIB.Topic | null>(null);
+    const ttsRef = useRef<ROSLIB.Topic | null>(null);
+
+    // Recreate topics when ros connection or robot profile changes
+    useEffect(() => {
+        cmdVelRef.current = null;
+        nav2dRef.current = null;
+        ttsRef.current = null;
+    }, [ros, robotProfile]);
 
     if (ros) {
         if (!cmdVelRef.current) {
             cmdVelRef.current = new ROSLIB.Topic({
                 ros,
-                name: '/hsrb/command_velocity',
+                name: robotProfile.cmdVelTopic,
                 messageType: 'geometry_msgs/Twist'
             });
         }
-        if (!nav2d.current) {
-            nav2d.current = new ROSLIB.Topic({
+        if (!nav2dRef.current) {
+            nav2dRef.current = new ROSLIB.Topic({
                 ros,
-                name: '/goal',
+                name: robotProfile.navGoalTopic,
                 messageType: 'geometry_msgs/PoseStamped'
             });
         }
-        if (!ttsus.current) {
-            ttsus.current = new ROSLIB.Topic({
+        if (!ttsRef.current && robotProfile.ttsTopic) {
+            ttsRef.current = new ROSLIB.Topic({
                 ros,
-                name: '/talk_request',
+                name: robotProfile.ttsTopic,
                 messageType: 'tmc_msgs/Voice'
             });
         }
@@ -151,14 +172,41 @@ export default function Controller() {
     });
 
     const [tabValue, setTabValue] = useState(0);
+
+    const [topicInputs, setTopicInputs] = useState<Record<string, string>>(() => toTopicInputs(robotProfile));
+
+    useEffect(() => {
+        setTopicInputs(toTopicInputs(robotProfile));
+    }, [robotProfile]);
+
+    const setTopic = (key: string, value: string) =>
+        setTopicInputs(prev => ({ ...prev, [key]: value }));
+
+    const handleSaveTopics = () => {
+        const overrides: TopicOverrides = {
+            cmdVelTopic:       topicInputs.cmdVelTopic || undefined,
+            navGoalTopic:      topicInputs.navGoalTopic || undefined,
+            ttsTopic:          topicInputs.ttsTopic || undefined,
+            batteryTopic:      topicInputs.batteryTopic || undefined,
+            armServerName:     topicInputs.armServerName || undefined,
+            gripperServerName: topicInputs.gripperServerName || undefined,
+            headServerName:    topicInputs.headServerName || undefined,
+        };
+        setTopicOverrides(overrides);
+    };
+
     const [linearScale, setLinearScale] = useState(0.5);
     const [lateralScale, setLateralScale] = useState(0.5);
     const [angularScale, setAngularScale] = useState(1.0);
 
-    // Arm tab state
-    const [armJoints, setArmJoints] = useState({ arm_lift: 0.0, arm_flex: 0.0, arm_roll: 0.0, wrist_flex: -1.57, wrist_roll: 0.0 });
-    const [gripperPos, setGripperPos] = useState(0.5);
-    const [headJoints, setHeadJoints] = useState({ pan: 0.0, tilt: 0.0 });
+    // Joint states initialized from robot profile
+    const [armJoints, setArmJoints] = useState<Record<string, number>>(
+        () => Object.fromEntries((robotProfile.arm?.joints ?? []).map(j => [j.key, j.defaultValue]))
+    );
+    const [gripperPos, setGripperPos] = useState(robotProfile.gripper?.defaultValue ?? 0.0);
+    const [headJoints, setHeadJoints] = useState<Record<string, number>>(
+        () => Object.fromEntries((robotProfile.head?.joints ?? []).map(j => [j.key, j.defaultValue]))
+    );
     const [motionTime, setMotionTime] = useState(3.0);
     const [armStatus, setArmStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
 
@@ -166,22 +214,22 @@ export default function Controller() {
     const gripperAcRef = useRef<ROSLIB.ActionClient | null>(null);
     const headAcRef = useRef<ROSLIB.ActionClient | null>(null);
 
-    // Reset ActionClients when ros changes
+    // Reset ActionClients and joint states when ros or profile changes
     useEffect(() => {
         armAcRef.current = null;
         gripperAcRef.current = null;
         headAcRef.current = null;
-    }, [ros]);
-
-    const PRESET_GO      = { arm_lift: 0.0, arm_flex: 0.0, arm_roll: -1.57, wrist_flex: -1.57, wrist_roll: 0.0 };
-    const PRESET_NEUTRAL = { arm_lift: 0.0, arm_flex: 0.0,  arm_roll: 0.0,   wrist_flex: -1.57, wrist_roll: 0.0 };
+        setArmJoints(Object.fromEntries((robotProfile.arm?.joints ?? []).map(j => [j.key, j.defaultValue])));
+        setGripperPos(robotProfile.gripper?.defaultValue ?? 0.0);
+        setHeadJoints(Object.fromEntries((robotProfile.head?.joints ?? []).map(j => [j.key, j.defaultValue])));
+    }, [ros, robotProfile]);
 
     const sendArmTrajectory = (joints = armJoints) => {
-        if (!ros) return;
+        if (!ros || !robotProfile.arm) return;
         if (!armAcRef.current) {
             armAcRef.current = new ROSLIB.ActionClient({
                 ros,
-                serverName: '/hsrb/arm_trajectory_controller/follow_joint_trajectory',
+                serverName: robotProfile.arm.serverName,
                 actionName: 'control_msgs/FollowJointTrajectoryAction',
             });
         }
@@ -189,10 +237,10 @@ export default function Controller() {
             actionClient: armAcRef.current,
             goalMessage: {
                 trajectory: {
-                    joint_names: ['arm_lift_joint', 'arm_flex_joint', 'arm_roll_joint', 'wrist_flex_joint', 'wrist_roll_joint'],
+                    joint_names: robotProfile.arm.joints.map(j => j.jointName),
                     points: [{
-                        positions: [joints.arm_lift, joints.arm_flex, joints.arm_roll, joints.wrist_flex, joints.wrist_roll],
-                        velocities: [0, 0, 0, 0, 0],
+                        positions: robotProfile.arm.joints.map(j => joints[j.key] ?? j.defaultValue),
+                        velocities: robotProfile.arm.joints.map(() => 0),
                         time_from_start: { secs: Math.floor(motionTime), nsecs: 0 },
                     }],
                 },
@@ -205,11 +253,11 @@ export default function Controller() {
     };
 
     const sendGripperTrajectory = (pos = gripperPos) => {
-        if (!ros) return;
+        if (!ros || !robotProfile.gripper) return;
         if (!gripperAcRef.current) {
             gripperAcRef.current = new ROSLIB.ActionClient({
                 ros,
-                serverName: '/hsrb/gripper_controller/follow_joint_trajectory',
+                serverName: robotProfile.gripper.serverName,
                 actionName: 'control_msgs/FollowJointTrajectoryAction',
             });
         }
@@ -217,7 +265,7 @@ export default function Controller() {
             actionClient: gripperAcRef.current,
             goalMessage: {
                 trajectory: {
-                    joint_names: ['hand_motor_joint'],
+                    joint_names: [robotProfile.gripper.jointName],
                     points: [{
                         positions: [pos],
                         velocities: [0],
@@ -230,11 +278,11 @@ export default function Controller() {
     };
 
     const sendHeadTrajectory = (joints = headJoints) => {
-        if (!ros) return;
+        if (!ros || !robotProfile.head) return;
         if (!headAcRef.current) {
             headAcRef.current = new ROSLIB.ActionClient({
                 ros,
-                serverName: '/hsrb/head_trajectory_controller/follow_joint_trajectory',
+                serverName: robotProfile.head.serverName,
                 actionName: 'control_msgs/FollowJointTrajectoryAction',
             });
         }
@@ -242,10 +290,10 @@ export default function Controller() {
             actionClient: headAcRef.current,
             goalMessage: {
                 trajectory: {
-                    joint_names: ['head_pan_joint', 'head_tilt_joint'],
+                    joint_names: robotProfile.head.joints.map(j => j.jointName),
                     points: [{
-                        positions: [joints.pan, joints.tilt],
-                        velocities: [0, 0],
+                        positions: robotProfile.head.joints.map(j => joints[j.key] ?? j.defaultValue),
+                        velocities: robotProfile.head.joints.map(() => 0),
                         time_from_start: { secs: Math.floor(motionTime), nsecs: 0 },
                     }],
                 },
@@ -255,10 +303,10 @@ export default function Controller() {
     };
 
     const cancelArm = () => {
-        if (!ros) return;
+        if (!ros || !robotProfile.arm) return;
         const cancelTopic = new ROSLIB.Topic({
             ros,
-            name: '/hsrb/arm_trajectory_controller/follow_joint_trajectory/cancel',
+            name: `${robotProfile.arm.serverName}/cancel`,
             messageType: 'actionlib_msgs/GoalID',
         });
         cancelTopic.publish(new ROSLIB.Message({}));
@@ -313,7 +361,9 @@ export default function Controller() {
             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
                 {/* Header */}
                 <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>Robot Controller</Typography>
+                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>
+                        Robot Controller — {robotProfile.name}
+                    </Typography>
                 </Box>
 
                 <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
@@ -330,6 +380,7 @@ export default function Controller() {
                         >
                             <Tab label="Joystick" id="controller-tab-0" aria-controls="controller-tabpanel-0" />
                             <Tab label="Advanced" id="controller-tab-1" aria-controls="controller-tabpanel-1" />
+                            <Tab label="Topics" id="controller-tab-2" aria-controls="controller-tabpanel-2" />
                         </Tabs>
                     </Box>
 
@@ -387,121 +438,185 @@ export default function Controller() {
 
                     <TabPanel value={tabValue} index={1}>
                         <Box sx={{ p: 2, display: 'flex', flexWrap: 'wrap', gap: 2, alignItems: 'flex-start', overflowY: 'auto', flex: 1, minHeight: 0 }}>
-                            {/* Existing topic cards */}
-                            <CardTemplate msg={twist} pubFunc={cmdVelRef.current} />
-                            <CardTemplate msg={pose_stamped} pubFunc={nav2d.current} />
-                            <CardTemplate msg={voice} pubFunc={ttsus.current} />
+                            {/* Basic topic cards */}
+                            {cmdVelRef.current && <CardTemplate msg={twist} pubFunc={cmdVelRef.current} />}
+                            {nav2dRef.current && <CardTemplate msg={pose_stamped} pubFunc={nav2dRef.current} />}
+                            {ttsRef.current && <CardTemplate msg={voice} pubFunc={ttsRef.current} />}
 
-                            {/* Arm Joints */}
-                            <Card elevation={2} sx={{ width: 500 }}>
-                                <CardContent>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Arm Joints</Typography>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                        control_msgs/FollowJointTrajectoryAction
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                        <Typography variant="body2">Motion Time:</Typography>
-                                        <TextField
-                                            size="small"
-                                            type="number"
-                                            value={motionTime}
-                                            onChange={(e) => setMotionTime(Number(e.target.value))}
-                                            inputProps={{ min: 0.1, step: 0.5 }}
-                                            sx={{ width: 80 }}
-                                        />
-                                        <Typography variant="body2">s</Typography>
-                                    </Box>
-                                    {([
-                                        { key: 'arm_lift',   label: 'arm_lift',   min: 0.00,  max: 0.69, step: 0.01, unit: 'm' },
-                                        { key: 'arm_flex',   label: 'arm_flex',   min: -2.62, max: 0.00, step: 0.01, unit: 'rad' },
-                                        { key: 'arm_roll',   label: 'arm_roll',   min: -2.09, max: 3.84, step: 0.01, unit: 'rad' },
-                                        { key: 'wrist_flex', label: 'wrist_flex', min: -1.92, max: 1.22, step: 0.01, unit: 'rad' },
-                                        { key: 'wrist_roll', label: 'wrist_roll', min: -1.92, max: 3.84, step: 0.01, unit: 'rad' },
-                                    ] as const).map(({ key, label, min, max, step, unit }) => (
-                                        <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                            <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>{label}</Typography>
-                                            <Slider
-                                                value={armJoints[key]}
-                                                min={min} max={max} step={step}
-                                                onChange={(_e, v) => setArmJoints(prev => ({ ...prev, [key]: v as number }))}
-                                                sx={{ flex: 1 }}
-                                            />
-                                            <Typography variant="body2" sx={{ width: 80, textAlign: 'right', flexShrink: 0 }}>
-                                                {armJoints[key].toFixed(2)} {unit}
-                                            </Typography>
-                                        </Box>
-                                    ))}
-                                </CardContent>
-                                <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1, gap: 0.5, flexWrap: 'wrap' }}>
-                                    <Button size="small" variant="outlined" onClick={() => setArmJoints(PRESET_GO)}>To Go</Button>
-                                    <Button size="small" variant="outlined" onClick={() => setArmJoints(PRESET_NEUTRAL)}>To Neutral</Button>
-                                    <Button size="small" variant="outlined" color="error" onClick={cancelArm}>Cancel</Button>
-                                    <Button size="small" variant="contained" onClick={() => sendArmTrajectory()}>Send Arm</Button>
-                                    <Chip label={armStatus} color={armStatusColor} size="small" />
-                                </CardActions>
-                            </Card>
-
-                            {/* Gripper */}
-                            <Card elevation={2} sx={{ width: 500 }}>
-                                <CardContent>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Gripper</Typography>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                        control_msgs/FollowJointTrajectoryAction
-                                    </Typography>
-                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                        <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>hand_motor</Typography>
-                                        <Slider
-                                            value={gripperPos}
-                                            min={0.0} max={1.23} step={0.01}
-                                            onChange={(_e, v) => setGripperPos(v as number)}
-                                            sx={{ flex: 1 }}
-                                        />
-                                        <Typography variant="body2" sx={{ width: 60, textAlign: 'right', flexShrink: 0 }}>
-                                            {gripperPos.toFixed(2)}
+                            {/* Arm Joints — only shown when profile defines arm */}
+                            {robotProfile.arm && (
+                                <Card elevation={2} sx={{ width: 500 }}>
+                                    <CardContent>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Arm Joints</Typography>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                            control_msgs/FollowJointTrajectoryAction
                                         </Typography>
-                                    </Box>
-                                </CardContent>
-                                <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1 }}>
-                                    <Button size="small" variant="outlined" onClick={() => { setGripperPos(1.23); sendGripperTrajectory(1.23); }}>Open</Button>
-                                    <Button size="small" variant="outlined" onClick={() => { setGripperPos(0.0); sendGripperTrajectory(0.0); }}>Close</Button>
-                                    <Button size="small" variant="contained" onClick={() => sendGripperTrajectory()}>Send Gripper</Button>
-                                </CardActions>
-                            </Card>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                            <Typography variant="body2">Motion Time:</Typography>
+                                            <TextField
+                                                size="small"
+                                                type="number"
+                                                value={motionTime}
+                                                onChange={(e) => setMotionTime(Number(e.target.value))}
+                                                inputProps={{ min: 0.1, step: 0.5 }}
+                                                sx={{ width: 80 }}
+                                            />
+                                            <Typography variant="body2">s</Typography>
+                                        </Box>
+                                        {robotProfile.arm.joints.map(({ key, label, min, max, step, unit }) => (
+                                            <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                                <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>{label}</Typography>
+                                                <Slider
+                                                    value={armJoints[key] ?? 0}
+                                                    min={min} max={max} step={step}
+                                                    onChange={(_e, v) => setArmJoints(prev => ({ ...prev, [key]: v as number }))}
+                                                    sx={{ flex: 1 }}
+                                                />
+                                                <Typography variant="body2" sx={{ width: 80, textAlign: 'right', flexShrink: 0 }}>
+                                                    {(armJoints[key] ?? 0).toFixed(2)} {unit}
+                                                </Typography>
+                                            </Box>
+                                        ))}
+                                    </CardContent>
+                                    <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1, gap: 0.5, flexWrap: 'wrap' }}>
+                                        {Object.entries(robotProfile.arm.presets ?? {}).map(([name, values]) => (
+                                            <Button key={name} size="small" variant="outlined" onClick={() => setArmJoints(values)}>
+                                                To {name.charAt(0).toUpperCase() + name.slice(1)}
+                                            </Button>
+                                        ))}
+                                        <Button size="small" variant="outlined" color="error" onClick={cancelArm}>Cancel</Button>
+                                        <Button size="small" variant="contained" onClick={() => sendArmTrajectory()}>Send Arm</Button>
+                                        <Chip label={armStatus} color={armStatusColor} size="small" />
+                                    </CardActions>
+                                </Card>
+                            )}
 
-                            {/* Head */}
-                            <Card elevation={2} sx={{ width: 500 }}>
-                                <CardContent>
-                                    <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Head</Typography>
-                                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                                        control_msgs/FollowJointTrajectoryAction
-                                    </Typography>
-                                    {([
-                                        { key: 'pan',  label: 'pan',  min: -3.84, max: 1.75, step: 0.01 },
-                                        { key: 'tilt', label: 'tilt', min: -0.61, max: 0.35, step: 0.01 },
-                                    ] as const).map(({ key, label, min, max, step }) => (
-                                        <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                                            <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>{label}</Typography>
+                            {/* Gripper — only shown when profile defines gripper */}
+                            {robotProfile.gripper && (
+                                <Card elevation={2} sx={{ width: 500 }}>
+                                    <CardContent>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Gripper</Typography>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                            control_msgs/FollowJointTrajectoryAction
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>
+                                                {robotProfile.gripper.jointName}
+                                            </Typography>
                                             <Slider
-                                                value={headJoints[key]}
-                                                min={min} max={max} step={step}
-                                                onChange={(_e, v) => setHeadJoints(prev => ({ ...prev, [key]: v as number }))}
+                                                value={gripperPos}
+                                                min={robotProfile.gripper.min}
+                                                max={robotProfile.gripper.max}
+                                                step={0.01}
+                                                onChange={(_e, v) => setGripperPos(v as number)}
                                                 sx={{ flex: 1 }}
                                             />
-                                            <Typography variant="body2" sx={{ width: 80, textAlign: 'right', flexShrink: 0 }}>
-                                                {headJoints[key].toFixed(2)} rad
+                                            <Typography variant="body2" sx={{ width: 60, textAlign: 'right', flexShrink: 0 }}>
+                                                {gripperPos.toFixed(2)}
                                             </Typography>
                                         </Box>
-                                    ))}
-                                </CardContent>
-                                <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1 }}>
-                                    <Button size="small" variant="outlined" onClick={() => {
-                                        const zero = { pan: 0.0, tilt: 0.0 };
-                                        setHeadJoints(zero);
-                                        sendHeadTrajectory(zero);
-                                    }}>Reset Zero</Button>
-                                    <Button size="small" variant="contained" onClick={() => sendHeadTrajectory()}>Send Head</Button>
-                                </CardActions>
-                            </Card>
+                                    </CardContent>
+                                    <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1 }}>
+                                        <Button size="small" variant="outlined" onClick={() => { setGripperPos(robotProfile.gripper!.max); sendGripperTrajectory(robotProfile.gripper!.max); }}>Open</Button>
+                                        <Button size="small" variant="outlined" onClick={() => { setGripperPos(robotProfile.gripper!.min); sendGripperTrajectory(robotProfile.gripper!.min); }}>Close</Button>
+                                        <Button size="small" variant="contained" onClick={() => sendGripperTrajectory()}>Send Gripper</Button>
+                                    </CardActions>
+                                </Card>
+                            )}
+
+                            {/* Head — only shown when profile defines head */}
+                            {robotProfile.head && (
+                                <Card elevation={2} sx={{ width: 500 }}>
+                                    <CardContent>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Head</Typography>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                            control_msgs/FollowJointTrajectoryAction
+                                        </Typography>
+                                        {robotProfile.head.joints.map(({ key, label, min, max, step }) => (
+                                            <Box key={key} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                                                <Typography variant="body2" sx={{ width: 90, flexShrink: 0 }}>{label}</Typography>
+                                                <Slider
+                                                    value={headJoints[key] ?? 0}
+                                                    min={min} max={max} step={step}
+                                                    onChange={(_e, v) => setHeadJoints(prev => ({ ...prev, [key]: v as number }))}
+                                                    sx={{ flex: 1 }}
+                                                />
+                                                <Typography variant="body2" sx={{ width: 80, textAlign: 'right', flexShrink: 0 }}>
+                                                    {(headJoints[key] ?? 0).toFixed(2)} rad
+                                                </Typography>
+                                            </Box>
+                                        ))}
+                                    </CardContent>
+                                    <CardActions sx={{ justifyContent: 'flex-end', px: 2, pb: 1 }}>
+                                        <Button size="small" variant="outlined" onClick={() => {
+                                            const zero = Object.fromEntries(robotProfile.head!.joints.map(j => [j.key, 0.0]));
+                                            setHeadJoints(zero);
+                                            sendHeadTrajectory(zero);
+                                        }}>Reset Zero</Button>
+                                        <Button size="small" variant="contained" onClick={() => sendHeadTrajectory()}>Send Head</Button>
+                                    </CardActions>
+                                </Card>
+                            )}
+                        </Box>
+                    </TabPanel>
+
+                    <TabPanel value={tabValue} index={2}>
+                        <Box sx={{ p: 2, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2, color: '#1565C0' }}>
+                                Robot Type
+                            </Typography>
+                            <Select
+                                value={robotProfile.id}
+                                onChange={(e) => setRobotProfileId(e.target.value)}
+                                size="small"
+                                fullWidth
+                                sx={{ mb: 3 }}
+                            >
+                                {ROBOT_PROFILES.map((p) => (
+                                    <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>
+                                ))}
+                            </Select>
+
+                            <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1.5, color: '#1565C0' }}>
+                                Topic Names
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                                <TextField label="cmd_vel" size="small" fullWidth
+                                    value={topicInputs.cmdVelTopic ?? ''}
+                                    onChange={(e) => setTopic('cmdVelTopic', e.target.value)} />
+                                <TextField label="nav goal" size="small" fullWidth
+                                    value={topicInputs.navGoalTopic ?? ''}
+                                    onChange={(e) => setTopic('navGoalTopic', e.target.value)} />
+                                <TextField label="TTS (talk_request)" size="small" fullWidth
+                                    value={topicInputs.ttsTopic ?? ''}
+                                    onChange={(e) => setTopic('ttsTopic', e.target.value)} />
+                                <TextField label="battery state" size="small" fullWidth
+                                    value={topicInputs.batteryTopic ?? ''}
+                                    onChange={(e) => setTopic('batteryTopic', e.target.value)} />
+                                {robotProfile.arm && (
+                                    <TextField label="arm action server" size="small" fullWidth
+                                        value={topicInputs.armServerName ?? ''}
+                                        onChange={(e) => setTopic('armServerName', e.target.value)} />
+                                )}
+                                {robotProfile.gripper && (
+                                    <TextField label="gripper action server" size="small" fullWidth
+                                        value={topicInputs.gripperServerName ?? ''}
+                                        onChange={(e) => setTopic('gripperServerName', e.target.value)} />
+                                )}
+                                {robotProfile.head && (
+                                    <TextField label="head action server" size="small" fullWidth
+                                        value={topicInputs.headServerName ?? ''}
+                                        onChange={(e) => setTopic('headServerName', e.target.value)} />
+                                )}
+                                <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                                    <Button size="small" variant="text" color="warning" onClick={resetTopicOverrides}>
+                                        Reset to defaults
+                                    </Button>
+                                    <Button size="small" variant="contained" onClick={handleSaveTopics}>
+                                        Save
+                                    </Button>
+                                </Box>
+                            </Box>
                         </Box>
                     </TabPanel>
                 </Box>
