@@ -48,9 +48,9 @@ export default function LogModal({ openModal, serverIp = 'localhost' }) {
 
     const scrollBottomRef = useRef<HTMLDivElement | null>(null);
 
-    const connectWebSocket = (taskName: string, nodeName: string): WebSocket => {
+    const connectWebSocket = (taskName: string, nodeName: string, targetIp: string): WebSocket => {
         console.log(`LOG button clicked for ${nodeName}`);
-        const conn = new WebSocket(`ws://${serverIp}:3001/ws/${taskName}/${nodeName}`);
+        const conn = new WebSocket(`ws://${targetIp}:3001/ws/${taskName}/${nodeName}`);
 
         conn.onopen = () => {
             console.log('get connected');
@@ -82,8 +82,9 @@ export default function LogModal({ openModal, serverIp = 'localhost' }) {
     };
 
     useEffect(() => {
-        if (openModal.length == 2) {
-            const conn = connectWebSocket(openModal[0], openModal[1]);
+        if (openModal.length >= 2) {
+            const effectiveIp = openModal[2] ?? serverIp;
+            const conn = connectWebSocket(openModal[0], openModal[1], effectiveIp);
             setConnection(conn);
             setIsOpen(true);
         }

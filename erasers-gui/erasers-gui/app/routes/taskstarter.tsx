@@ -5,27 +5,37 @@ import {
   Card,
   CardContent,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
-  Tabs,
-  Tab,
-  Typography,
-  Checkbox,
+  FormControl,
   FormControlLabel,
+  IconButton,
+  InputLabel,
   LinearProgress,
+  MenuItem,
+  Popover,
+  Select,
+  Tab,
+  Tabs,
   TextField,
+  Checkbox,
   ToggleButton,
   ToggleButtonGroup,
-  Select,
-  MenuItem,
-  InputLabel,
-  FormControl,
+  Tooltip,
+  Typography,
 } from '@mui/material';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
-import PlayArrowIcon from '@mui/icons-material/PlayArrow';
-import StopIcon from '@mui/icons-material/Stop';
+import AddIcon from '@mui/icons-material/Add';
 import ArticleIcon from '@mui/icons-material/Article';
+import ComputerIcon from '@mui/icons-material/Computer';
+import DeleteIcon from '@mui/icons-material/Delete';
+import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import RouterIcon from '@mui/icons-material/Router';
+import StopIcon from '@mui/icons-material/Stop';
 import StorageIcon from '@mui/icons-material/Storage';
 import TerminalIcon from '@mui/icons-material/Terminal';
 
@@ -33,7 +43,7 @@ import OptionVariables from '~/components/dashboard/OptionVariablesParser';
 import LogModal from '~/components/dashboard/LogModal';
 import AppLayout from '~/components/AppLayout';
 import { useRos } from '~/scripts/ros';
-import { useTaskStarter } from '~/scripts/taskstarter_context';
+import { useTaskStarter, generateId, type ServerEntry } from '~/scripts/taskstarter_context';
 
 
 interface TabPanelProps {
@@ -65,6 +75,8 @@ export default function TaskStarter() {
     networkIf, setNetworkIf,
     networkIp, setNetworkIp,
     networkInterfaces, setNetworkInterfaces,
+    networkIfMap, setNetworkIfMap,
+    networkInterfacesMap, setNetworkInterfacesMap,
     nodeDockerMode, setNodeDockerMode,
     nodeComposePath, setNodeComposePath,
     runStatus, setRunStatus,
@@ -72,40 +84,104 @@ export default function TaskStarter() {
     taskData, setTaskData,
     tabValue, setTabValue,
     optionVariables, setOptionVariable,
+    servers, primaryServerId,
+    addServer, removeServer, setPrimaryServerId,
   } = useTaskStarter();
 
   const [crashAlert, setCrashAlert] = useState<{ taskDisplay: string; nodeDisplay: string; code: number } | null>(null);
   const runStatusRef = useRef<any>(null);
   useEffect(() => { runStatusRef.current = runStatus; }, [runStatus]);
 
-  const [srvOnline, setSrvOnline] = useState<boolean>(false);
+  // Per-server online map
+  const [serverOnlineMap, setServerOnlineMap] = useState<Record<string, boolean>>({});
+  // Per-node target server IP (defaults to primary when not set)
+  const [nodeTargetServer, setNodeTargetServer] = useState<Record<string, Record<string, string>>>({});
+
+  const primaryIp = servers.find(s => s.id === primaryServerId)?.ip ?? serverIp;
+  const srvOnline = serverOnlineMap[primaryIp] ?? false;
+  const isLocal = !primaryIp || primaryIp === 'localhost' || primaryIp === '127.0.0.1';
+
+  const getNodeTarget = (taskKey: string, nodeKey: string): string =>
+    nodeTargetServer[taskKey]?.[nodeKey] ?? primaryIp;
+
+  // Which server's NI is currently shown in the Network section
+  const [networkConfigIp, setNetworkConfigIp] = useState<string>(primaryIp);
+  // Sync networkConfigIp when primary changes
+  useEffect(() => { setNetworkConfigIp(primaryIp); }, [primaryIp]);
+
+  // Poll all registered servers for online status
+  useEffect(() => {
+    const checkAll = async () => {
+      if (servers.length === 0) return;
+      const results: Record<string, boolean> = {};
+      await Promise.allSettled(
+        servers.map(async (srv) => {
+          try {
+            await fetch(`http://${srv.ip}:3001/get_task`, { signal: AbortSignal.timeout(1500) });
+            results[srv.ip] = true;
+          } catch {
+            results[srv.ip] = false;
+          }
+        })
+      );
+      setServerOnlineMap(results);
+    };
+    checkAll();
+    const id = setInterval(checkAll, 3000);
+    return () => clearInterval(id);
+  }, [servers]);
+
+  // Server add dialog
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [newServerLabel, setNewServerLabel] = useState('');
+  const [newServerIp, setNewServerIp] = useState('');
+
+  const handleAddServer = () => {
+    const label = newServerLabel.trim();
+    const ip = newServerIp.trim();
+    if (!label || !ip) return;
+    addServer({ id: generateId(), label, ip });
+    setNewServerLabel('');
+    setNewServerIp('');
+    setAddDialogOpen(false);
+  };
+
+  const handleAddAndConnect = async () => {
+    const label = newServerLabel.trim();
+    const ip = newServerIp.trim();
+    if (!label || !ip) return;
+    const newId = generateId();
+    addServer({ id: newId, label, ip });
+    setNewServerLabel('');
+    setNewServerIp('');
+    setAddDialogOpen(false);
+    setConnectError('');
+    try {
+      const [, fetchedNif] = await Promise.all([
+        loadTasks(ip),
+        fetchExecutionConfig(ip),
+      ]);
+      await applyExecutionConfig(ip, fetchedNif, hostname);
+      setPrimaryServerId(newId, ip);
+      setNodeTargetServer({});
+    } catch {
+      setConnectError(`サーバー (${ip}:3001) に接続できません。`);
+    }
+  };
+
+  // RUN ALL popover
+  const [runAllPopover, setRunAllPopover] = useState<{ el: HTMLElement; taskName: string } | null>(null);
+
   const [srvConfig, setSrvConfig] = useState(
     () => (typeof window !== 'undefined' ? localStorage.getItem('erasers_server_config') : null) ?? ''
   );
-  const isLocal = !serverIpInput || serverIpInput === 'localhost' || serverIpInput === '127.0.0.1';
-
-  useEffect(() => {
-    const targetIp = serverIpInput || 'localhost';
-    const check = async () => {
-      try {
-        await fetch(`http://${targetIp}:3001/get_task`,
-                    { signal: AbortSignal.timeout(1500) });
-        setSrvOnline(true);
-      } catch {
-        setSrvOnline(false);
-      }
-    };
-    check();
-    const id = setInterval(check, 3000);
-    return () => clearInterval(id);
-  }, [serverIpInput]);
 
   const handleStart = () => {
     localStorage.setItem('erasers_server_config', srvConfig);
-    window.location.href =
-      `erasers://start?config=${encodeURIComponent(srvConfig)}`;
+    window.location.href = `erasers://start?config=${encodeURIComponent(srvConfig)}`;
   };
 
+  // Poll running status — use targetIp stored per node
   useEffect(() => {
     if (!serverIp || !taskData) return;
     const id = setInterval(async () => {
@@ -113,9 +189,11 @@ export default function TaskStarter() {
       if (!rs) return;
       for (const tk of Object.keys(rs)) {
         for (const nk of Object.keys(rs[tk])) {
-          if (!rs[tk][nk]) continue;
+          const entry = rs[tk][nk];
+          if (!entry?.is_running) continue;
+          const targetIp = entry.targetIp ?? serverIp;
           try {
-            const r = await fetch(`http://${serverIp}:3001/task_running/${tk}/${nk}`, { cache: 'no-store' });
+            const r = await fetch(`http://${targetIp}:3001/task_running/${tk}/${nk}`, { cache: 'no-store' });
             const d = await r.json();
             if (!d.is_running) {
               setRunStatus((prev: any) => ({ ...prev, [tk]: { ...prev[tk], [nk]: false } }));
@@ -140,8 +218,12 @@ export default function TaskStarter() {
     const cfg = await cfgRes.json();
     const nif = await nifRes.json();
     const interfaces: { name: string; ip: string }[] = nif.interfaces ?? [];
-    setNetworkInterfaces(interfaces);
     const currentNif = cfg.network_if ?? '';
+    // Update per-server maps
+    setNetworkInterfacesMap(prev => ({ ...prev, [ip]: interfaces }));
+    setNetworkIfMap(prev => ({ ...prev, [ip]: currentNif }));
+    // Keep global state in sync (used by primary server)
+    setNetworkInterfaces(interfaces);
     setNetworkIf(currentNif);
     setNetworkIp(interfaces.find((i) => i.name === currentNif)?.ip ?? '');
     return currentNif;
@@ -161,7 +243,8 @@ export default function TaskStarter() {
       ...prev,
       [taskName]: { ...prev[taskName], [nodeName]: dockerMode },
     }));
-    await fetch(`http://${serverIp}:3001/set_node_config/${taskName}/${nodeName}`, {
+    const targetIp = getNodeTarget(taskName, nodeName);
+    await fetch(`http://${targetIp}:3001/set_node_config/${taskName}/${nodeName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ docker_mode: dockerMode }),
@@ -173,7 +256,8 @@ export default function TaskStarter() {
       ...prev,
       [taskName]: { ...prev[taskName], [nodeName]: path },
     }));
-    await fetch(`http://${serverIp}:3001/set_node_config/${taskName}/${nodeName}`, {
+    const targetIp = getNodeTarget(taskName, nodeName);
+    await fetch(`http://${targetIp}:3001/set_node_config/${taskName}/${nodeName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ compose_path: path }),
@@ -186,13 +270,7 @@ export default function TaskStarter() {
     return tasks;
   };
 
-  const getTaskRunning = async (taskName: string, nodeName: string) => {
-    const response = await fetch(`http://${serverIp}:3001/task_running/${taskName}/${nodeName}`, { cache: 'no-store' });
-    const is_running = await response.json();
-    return is_running;
-  };
-
-  const handleRunButtonClick = async (taskName, nodeName, debug, option) => {
+  const handleRunButtonClick = async (taskName, nodeName, debug, option, targetIp: string) => {
     var _body: any = { "debug": debug };
     const defaultop = taskData[taskName].programs[nodeName].command.variables;
     const setedop = option[taskName]?.[nodeName];
@@ -208,7 +286,7 @@ export default function TaskStarter() {
       }
     }
 
-    const response = await fetch(`http://${serverIp}:3001/run_task/${taskName}/${nodeName}`, {
+    const response = await fetch(`http://${targetIp}:3001/run_task/${taskName}/${nodeName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(_body),
@@ -216,12 +294,12 @@ export default function TaskStarter() {
 
     if (response.ok) {
       var run_status = runStatus;
-      run_status[taskName][nodeName] = true;
+      run_status[taskName][nodeName] = { is_running: true, targetIp };
       setRunStatus({ ...run_status });
     }
   };
 
-  const handleRunWithTerminalButtonClick = async (taskName, nodeName) => {
+  const handleRunWithTerminalButtonClick = async (taskName, nodeName, targetIp: string) => {
     const defaultop = taskData[taskName].programs[nodeName].command.variables;
     const setedop = optionVariables[taskName]?.[nodeName];
     var _body: any = { terminal: true };
@@ -236,14 +314,14 @@ export default function TaskStarter() {
         }
       }
     }
-    const response = await fetch(`http://${serverIp}:3001/run_task/${taskName}/${nodeName}`, {
+    const response = await fetch(`http://${targetIp}:3001/run_task/${taskName}/${nodeName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(_body),
     });
     if (response.ok) {
       var run_status = runStatus;
-      run_status[taskName][nodeName] = true;
+      run_status[taskName][nodeName] = { is_running: true, targetIp };
       setRunStatus({ ...run_status });
     }
   };
@@ -253,15 +331,15 @@ export default function TaskStarter() {
     await Promise.all(nodeNames.map((nodeName) => handleNodeDockerModeChange(taskName, nodeName, mode)));
   };
 
-  const handleRunAllButtonClick = async (taskName) => {
+  const handleRunAllOnServer = async (taskName: string, targetIp: string) => {
     const nodeNames = Object.keys(taskData[taskName].programs);
     await Promise.all(nodeNames.map((nodeName) =>
-      handleRunButtonClick(taskName, nodeName, false, optionVariables)
+      handleRunButtonClick(taskName, nodeName, false, optionVariables, targetIp)
     ));
   };
 
-  const handleRunWeztermButtonClick = async (taskName) => {
-    await fetch(`http://${serverIp}:3001/run_wezterm/${taskName}`, {
+  const handleRunWeztermButtonClick = async (taskName, targetIp: string) => {
+    await fetch(`http://${targetIp}:3001/run_wezterm/${taskName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -276,7 +354,9 @@ export default function TaskStarter() {
   };
 
   const handleKillButtonClick = async (taskName, nodeName) => {
-    const response = await fetch(`http://${serverIp}:3001/kill_task/${taskName}/${nodeName}`, {
+    const entry = runStatus?.[taskName]?.[nodeName];
+    const targetIp = entry?.targetIp ?? serverIp;
+    const response = await fetch(`http://${targetIp}:3001/kill_task/${taskName}/${nodeName}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
@@ -291,7 +371,9 @@ export default function TaskStarter() {
 
   const [openLogModal, setOpenLogModal] = useState<any[]>([]);
   const handleGetLogButtonClick = (taskName, nodeName) => {
-    setOpenLogModal([taskName, nodeName]);
+    const entry = runStatus?.[taskName]?.[nodeName];
+    const targetIp = entry?.targetIp ?? serverIp;
+    setOpenLogModal([taskName, nodeName, targetIp]);
   };
 
   const handleChangeDebug = (_event, task_index, node_index) => {
@@ -321,7 +403,7 @@ export default function TaskStarter() {
       var C: Record<string, string> = {};
       for (var node_k in tsData[task_k].programs) {
         const res = await fetch(`http://${ip}:3001/task_running/${task_k}/${node_k}`, { cache: 'no-store' }).then(r => r.json());
-        K[node_k] = res.is_running;
+        K[node_k] = res.is_running ? { is_running: true, targetIp: ip } : false;
         D[node_k] = tsData[task_k].programs[node_k].docker_mode ?? false;
         C[node_k] = tsData[task_k].programs[node_k].compose_path ?? '';
       }
@@ -335,19 +417,25 @@ export default function TaskStarter() {
     setTaskData(tsData);
   };
 
-  const handleConnect = async () => {
+  const handleSelectPrimary = async (id: string) => {
+    const srv = servers.find(s => s.id === id);
+    if (!srv) return;
     setConnectError('');
     try {
-      const [, fetchedNif] = await Promise.all([loadTasks(serverIpInput), fetchExecutionConfig(serverIpInput)]);
-      await applyExecutionConfig(serverIpInput, fetchedNif, hostname);
-      setServerIp(serverIpInput);
+      const [, fetchedNif] = await Promise.all([
+        loadTasks(srv.ip),
+        fetchExecutionConfig(srv.ip),
+      ]);
+      await applyExecutionConfig(srv.ip, fetchedNif, hostname);
+      setPrimaryServerId(id, srv.ip);
+      setNodeTargetServer({});
     } catch {
-      setConnectError(`サーバー (${serverIpInput}:3001) に接続できません。`);
+      setConnectError(`サーバー (${srv.ip}:3001) に接続できません。`);
     }
   };
 
   useEffect(() => {
-    if (!taskData) {
+    if (!taskData && servers.length > 0) {
       Promise.all([loadTasks(serverIp), fetchExecutionConfig(serverIp)]).catch(() => {});
     }
   }, []);
@@ -361,6 +449,48 @@ export default function TaskStarter() {
   const handleChangeTaskTab = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
+
+  // Server selector popover for per-node target
+  const ServerSelectorMenu = ({
+    value,
+    onChange,
+  }: {
+    value: string;
+    onChange: (ip: string) => void;
+  }) => (
+    <FormControl size="small" sx={{ minWidth: 130 }}>
+      <Select
+        value={value}
+        onChange={(e) => onChange(e.target.value as string)}
+        renderValue={(val) => {
+          const srv = servers.find(s => s.ip === val);
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <ComputerIcon sx={{ fontSize: 12, color: 'inherit' }} />
+              <Typography variant="caption">{srv?.label ?? val}</Typography>
+            </Box>
+          );
+        }}
+        sx={{ height: 28, fontSize: '0.75rem' }}
+      >
+        {servers.map((srv) => (
+          <MenuItem key={srv.id} value={srv.ip} disabled={!serverOnlineMap[srv.ip]}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{
+                width: 8, height: 8, borderRadius: '50%',
+                bgcolor: serverOnlineMap[srv.ip] ? '#4CAF50' : '#9E9E9E',
+                flexShrink: 0,
+              }} />
+              <Box>
+                <Typography variant="body2">{srv.label}</Typography>
+                <Typography variant="caption" color="text.secondary">{srv.ip}</Typography>
+              </Box>
+            </Box>
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
 
   return (
     <AppLayout>
@@ -376,6 +506,79 @@ export default function TaskStarter() {
         </Alert>
       </Snackbar>
 
+      {/* Server add dialog */}
+      <Dialog open={addDialogOpen} onClose={() => setAddDialogOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>サーバーを追加</DialogTitle>
+        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
+          <TextField
+            label="表示名 (例: Robot PC1)"
+            size="small"
+            value={newServerLabel}
+            onChange={(e) => setNewServerLabel(e.target.value)}
+            fullWidth
+            autoFocus
+          />
+          <TextField
+            label="IPアドレス (例: 192.168.1.10)"
+            size="small"
+            value={newServerIp}
+            onChange={(e) => setNewServerIp(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddServer(); }}
+            fullWidth
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setAddDialogOpen(false)}>キャンセル</Button>
+          <Button onClick={handleAddServer} disabled={!newServerLabel.trim() || !newServerIp.trim()}>
+            追加
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleAddAndConnect}
+            disabled={!newServerLabel.trim() || !newServerIp.trim()}
+          >
+            追加して接続
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* RUN ALL server popover */}
+      <Popover
+        open={Boolean(runAllPopover)}
+        anchorEl={runAllPopover?.el}
+        onClose={() => setRunAllPopover(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Box sx={{ p: 1, display: 'flex', flexDirection: 'column', gap: 0.5, minWidth: 200 }}>
+          <Typography variant="caption" sx={{ px: 1, color: 'text.secondary' }}>
+            全ノードを実行するサーバーを選択
+          </Typography>
+          {servers.map((srv) => {
+            const isOnline = serverOnlineMap[srv.ip] ?? false;
+            return (
+              <MenuItem
+                key={srv.id}
+                disabled={!isOnline}
+                onClick={() => {
+                  if (!runAllPopover) return;
+                  handleRunAllOnServer(runAllPopover.taskName, srv.ip);
+                  setRunAllPopover(null);
+                }}
+                sx={{ borderRadius: 1 }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: isOnline ? '#4CAF50' : '#9E9E9E', flexShrink: 0 }} />
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>{srv.label}</Typography>
+                    <Typography variant="caption" color="text.secondary">{srv.ip}</Typography>
+                  </Box>
+                </Box>
+              </MenuItem>
+            );
+          })}
+        </Box>
+      </Popover>
+
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
         {/* Header */}
         <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
@@ -383,7 +586,7 @@ export default function TaskStarter() {
         </Box>
 
         {/* Setup Panel */}
-        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', alignItems: 'center', gap: 0, flexWrap: 'wrap' }}>
+        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', alignItems: 'flex-start', gap: 0, flexWrap: 'wrap' }}>
 
           {/* Task Controller Server */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pr: 3 }}>
@@ -431,34 +634,63 @@ export default function TaskStarter() {
 
           <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
 
-          {/* Connect */}
+          {/* Servers management */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pr: 3 }}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              サーバーに接続 / Connect
+              サーバー管理 / Servers
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5 }}>
-              TASKSTARTERが起動しているPCのIPアドレスを入力して接続します
+              接続するサーバーを選択してください（クリックで接続）
             </Typography>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <TextField
-                label="サーバーIP"
-                size="small"
-                value={serverIpInput}
-                onChange={(e) => setServerIpInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === 'Enter') handleConnect(); }}
-                placeholder="192.168.1.10"
-                sx={{ width: 160 }}
-              />
-              <Button variant="contained" startIcon={<RouterIcon />} onClick={handleConnect}>
-                接続
-              </Button>
-              {connectError && (
-                <Typography variant="body2" color="error">{connectError}</Typography>
-              )}
-              {taskData && !connectError && (
-                <Chip label={`${serverIp}:3001`} size="small" color="success" variant="outlined" />
-              )}
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
+              {servers.map((srv) => {
+                const isOnline = serverOnlineMap[srv.ip] ?? false;
+                const isPrimary = srv.id === primaryServerId;
+                return (
+                  <Tooltip key={srv.id} title="クリックして接続" placement="top">
+                    <Chip
+                      label={`${srv.label} (${srv.ip})`}
+                      size="small"
+                      icon={<ComputerIcon sx={{ fontSize: '0.9rem !important' }} />}
+                      onClick={() => handleSelectPrimary(srv.id)}
+                      onDelete={() => removeServer(srv.id)}
+                      deleteIcon={<DeleteIcon />}
+                      sx={{
+                        bgcolor: isPrimary ? '#E3F2FD' : (isOnline ? '#E8F5E9' : '#FAFAFA'),
+                        color: isPrimary ? '#1565C0' : (isOnline ? '#2E7D32' : '#9E9E9E'),
+                        fontWeight: isPrimary ? 700 : 400,
+                        border: '1px solid',
+                        borderColor: isPrimary ? '#90CAF9' : (isOnline ? '#A5D6A7' : '#E0E0E0'),
+                        cursor: 'pointer',
+                        '& .MuiChip-icon': { color: 'inherit' },
+                        '& .MuiChip-deleteIcon': { color: 'inherit', opacity: 0.6, '&:hover': { opacity: 1 } },
+                      }}
+                    />
+                  </Tooltip>
+                );
+              })}
+              <Tooltip title="サーバーを追加" placement="top">
+                <IconButton
+                  size="small"
+                  onClick={() => setAddDialogOpen(true)}
+                  sx={{ bgcolor: '#F5F5F5', '&:hover': { bgcolor: '#E0E0E0' } }}
+                >
+                  <AddIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
             </Box>
+            {connectError && (
+              <Typography variant="body2" color="error">{connectError}</Typography>
+            )}
+            {taskData && !connectError && primaryServerId && (
+              <Chip
+                label={`${primaryIp}:3001 に接続中`}
+                size="small"
+                color="success"
+                variant="outlined"
+                sx={{ alignSelf: 'flex-start' }}
+              />
+            )}
           </Box>
 
           <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
@@ -469,31 +701,72 @@ export default function TaskStarter() {
               ネットワーク設定 / Network
             </Typography>
             <Typography variant="caption" sx={{ color: 'text.disabled', display: 'block', mb: 0.5 }}>
-              タスク実行に使うPCのインターフェースを選択して，ROS_IPをセットします
+              各サーバーのネットワークインターフェースを設定します
             </Typography>
+            {/* Server selector — shown only when multiple servers are registered */}
+            {servers.length > 1 && (
+              <FormControl size="small" sx={{ minWidth: 160 }}>
+                <InputLabel>設定対象サーバー</InputLabel>
+                <Select
+                  value={networkConfigIp}
+                  label="設定対象サーバー"
+                  onChange={(e) => {
+                    const ip = e.target.value as string;
+                    setNetworkConfigIp(ip);
+                    // Lazy fetch: load config if not yet cached
+                    if (!networkInterfacesMap[ip]) {
+                      fetchExecutionConfig(ip).catch(() => {});
+                    }
+                  }}
+                >
+                  {servers.map((srv) => (
+                    <MenuItem key={srv.id} value={srv.ip}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{
+                          width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+                          bgcolor: serverOnlineMap[srv.ip] ? '#4CAF50' : '#9E9E9E',
+                        }} />
+                        {srv.label} ({srv.ip})
+                      </Box>
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            )}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <FormControl size="small" sx={{ minWidth: 130 }}>
                 <InputLabel>Network IF</InputLabel>
                 <Select
-                  value={networkIf}
+                  value={networkIfMap[networkConfigIp] ?? ''}
                   label="Network IF"
                   onChange={(e) => {
-                    const selected = e.target.value;
-                    setNetworkIf(selected);
-                    setNetworkIp(networkInterfaces.find((i) => i.name === selected)?.ip ?? '');
-                    applyExecutionConfig(serverIp, selected);
+                    const selected = e.target.value as string;
+                    const ifaces = networkInterfacesMap[networkConfigIp] ?? [];
+                    const resolvedIp = ifaces.find((i) => i.name === selected)?.ip ?? '';
+                    setNetworkIfMap(prev => ({ ...prev, [networkConfigIp]: selected }));
+                    // Keep global state in sync for primary server
+                    if (networkConfigIp === primaryIp) {
+                      setNetworkIf(selected);
+                      setNetworkIp(resolvedIp);
+                    }
+                    applyExecutionConfig(networkConfigIp, selected);
                   }}
                 >
-                  {networkInterfaces.map((iface) => (
+                  {(networkInterfacesMap[networkConfigIp] ?? []).map((iface) => (
                     <MenuItem key={iface.name} value={iface.name}>{iface.name}</MenuItem>
                   ))}
                 </Select>
               </FormControl>
-              {networkIp && (
-                <Typography variant="body2" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
-                  {networkIp}
-                </Typography>
-              )}
+              {(() => {
+                const nif = networkIfMap[networkConfigIp] ?? '';
+                const ifaces = networkInterfacesMap[networkConfigIp] ?? [];
+                const ip = ifaces.find((i) => i.name === nif)?.ip;
+                return ip ? (
+                  <Typography variant="body2" sx={{ color: 'text.secondary', fontFamily: 'monospace' }}>
+                    {ip}
+                  </Typography>
+                ) : null;
+              })()}
             </Box>
           </Box>
 
@@ -537,10 +810,30 @@ export default function TaskStarter() {
                         Local
                       </Button>
                       <Divider orientation="vertical" flexItem />
-                      <Button variant="contained" color="success" size="small" startIcon={<PlayArrowIcon />} disabled={!networkIf} onClick={() => handleRunAllButtonClick(task_key)}>
+                      <Button
+                        variant="contained"
+                        color="success"
+                        size="small"
+                        startIcon={<PlayArrowIcon />}
+                        disabled={!networkIf}
+                        onClick={(e) => {
+                          if (servers.length <= 1) {
+                            handleRunAllOnServer(task_key, servers[0]?.ip ?? serverIp);
+                          } else {
+                            setRunAllPopover({ el: e.currentTarget, taskName: task_key });
+                          }
+                        }}
+                      >
                         RUN ALL
                       </Button>
-                      <Button variant="outlined" color="primary" size="small" startIcon={<TerminalIcon />} disabled={!networkIf} onClick={() => handleRunWeztermButtonClick(task_key)}>
+                      <Button
+                        variant="outlined"
+                        color="primary"
+                        size="small"
+                        startIcon={<TerminalIcon />}
+                        disabled={!networkIf}
+                        onClick={() => handleRunWeztermButtonClick(task_key, primaryIp)}
+                      >
                         Terminal
                       </Button>
                       <Button variant="outlined" color="error" size="small" startIcon={<StopIcon />} onClick={() => handleKillAllButtonClick(task_key)}>
@@ -551,7 +844,9 @@ export default function TaskStarter() {
 
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                     {Object.keys(taskData[task_key].programs).map((node_key, node_index) => {
-                      const isRunning = runStatus && runStatus[task_key][node_key];
+                      const nodeEntry = runStatus?.[task_key]?.[node_key];
+                      const isRunning = nodeEntry?.is_running ?? false;
+                      const nodeTarget = getNodeTarget(task_key, node_key);
                       return (
                         <Card
                           key={node_index}
@@ -572,17 +867,48 @@ export default function TaskStarter() {
                               <Typography variant="h6" sx={{ fontWeight: 600 }}>
                                 {taskData[task_key].programs[node_key].display_name}
                               </Typography>
-                              <Chip
-                                label={isRunning ? 'Running' : 'Stopped'}
-                                size="small"
-                                sx={{
-                                  bgcolor: isRunning ? '#E3F2FD' : '#F5F5F5',
-                                  color: isRunning ? '#1565C0' : '#9E9E9E',
-                                  fontWeight: 700,
-                                  border: '1px solid',
-                                  borderColor: isRunning ? '#90CAF9' : '#E0E0E0',
-                                }}
-                              />
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                {/* Per-node target server selector — only when multiple servers */}
+                                {servers.length > 1 && !isRunning && (
+                                  <ServerSelectorMenu
+                                    value={nodeTarget}
+                                    onChange={(ip) => setNodeTargetServer(prev => ({
+                                      ...prev,
+                                      [task_key]: { ...prev[task_key], [node_key]: ip },
+                                    }))}
+                                  />
+                                )}
+                                {/* Running on which PC */}
+                                {isRunning && nodeEntry?.targetIp && (() => {
+                                  const srv = servers.find(s => s.ip === nodeEntry.targetIp);
+                                  return (
+                                    <Chip
+                                      label={srv?.label ?? nodeEntry.targetIp}
+                                      size="small"
+                                      icon={<ComputerIcon sx={{ fontSize: '0.75rem !important' }} />}
+                                      sx={{
+                                        bgcolor: '#FFF8E1',
+                                        color: '#E65100',
+                                        border: '1px solid #FFCC80',
+                                        fontSize: '0.7rem',
+                                        height: 22,
+                                        '& .MuiChip-icon': { color: '#E65100' },
+                                      }}
+                                    />
+                                  );
+                                })()}
+                                <Chip
+                                  label={isRunning ? 'Running' : 'Stopped'}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: isRunning ? '#E3F2FD' : '#F5F5F5',
+                                    color: isRunning ? '#1565C0' : '#9E9E9E',
+                                    fontWeight: 700,
+                                    border: '1px solid',
+                                    borderColor: isRunning ? '#90CAF9' : '#E0E0E0',
+                                  }}
+                                />
+                              </Box>
                             </Box>
 
                             {/* Description */}
@@ -674,7 +1000,12 @@ export default function TaskStarter() {
                                   size="small"
                                   startIcon={<PlayArrowIcon />}
                                   disabled={!networkIf}
-                                  onClick={() => handleRunButtonClick(task_key, node_key, debugChecked[task_index][node_index], optionVariables)}
+                                  onClick={() => handleRunButtonClick(
+                                    task_key, node_key,
+                                    debugChecked[task_index][node_index],
+                                    optionVariables,
+                                    nodeTarget,
+                                  )}
                                 >
                                   RUN
                                 </Button>
@@ -694,7 +1025,7 @@ export default function TaskStarter() {
                                   size="small"
                                   startIcon={<TerminalIcon />}
                                   disabled={!networkIf}
-                                  onClick={() => handleRunWithTerminalButtonClick(task_key, node_key)}
+                                  onClick={() => handleRunWithTerminalButtonClick(task_key, node_key, nodeTarget)}
                                 >
                                   Terminal
                                 </Button>
@@ -720,7 +1051,11 @@ export default function TaskStarter() {
             </>
           ) : (
             <Box sx={{ p: 4 }}>
-              <Typography color="text.secondary">No task data found. Please check task controller is running.</Typography>
+              <Typography color="text.secondary">
+                {servers.length === 0
+                  ? 'サーバーを追加して接続してください。'
+                  : 'No task data found. Please check task controller is running.'}
+              </Typography>
             </Box>
           )}
         </Box>
