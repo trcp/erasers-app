@@ -693,10 +693,10 @@ export default function TaskStarter() {
             )}
           </Box>
 
-          <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+          {servers.length > 0 && <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />}
 
           {/* Network IF */}
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {servers.length > 0 && <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
             <Typography variant="caption" sx={{ fontWeight: 600, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 0.5 }}>
               ネットワーク設定 / Network
             </Typography>
@@ -768,7 +768,7 @@ export default function TaskStarter() {
                 ) : null;
               })()}
             </Box>
-          </Box>
+          </Box>}
 
         </Box>
 
