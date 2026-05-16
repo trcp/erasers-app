@@ -136,7 +136,8 @@ class NodeData:
                 stdout=self.log_file, stderr=subprocess.STDOUT
             )
         else:
-            self.proc = subprocess.Popen(cmd, stdout=self.log_file, stderr=subprocess.STDOUT, env=my_env)
+            cmd = " ".join(cmd)
+            self.proc = subprocess.Popen(cmd, stdout=self.log_file, stderr=subprocess.STDOUT, env=my_env, shell=True)
 
         return self.proc
 
@@ -150,9 +151,10 @@ class NodeData:
             self.proc.terminate()
 
         if self.command.kill != "":
-            cmd = self.command.kill.split()
+            # cmd = self.command.kill.split()
+            cmd = self.command.kill
             logger.info(f"[{self.node_name}] $ {' '.join(cmd)}")
-            subprocess.Popen(cmd)
+            subprocess.Popen(cmd, shell=True)
 
         self.proc = None
 

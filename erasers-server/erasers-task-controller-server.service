@@ -4,8 +4,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=INSTALL_USER
-Group=INSTALL_GROUP
 ExecStart=/usr/bin/python3 /home/roboworks/work/erasers-app/erasers-server/erasers_task_controller_server.py --config /home/roboworks/erasers_ws/tasks
 Restart=on-failure
 RestartSec=5

@@ -161,7 +161,7 @@ class ErasersTaskControlServer:
             "wezterm", "--config-file", task_config,
         ]
         logger.info(f"Wezterm起動: {task_name}")
-        subprocess.Popen(cmd)
+        subprocess.Popen(cmd, shell=True)
         return {"run": True}
 
     def set_node_config(self, task_name: str, node_name: str, body=Body(...)):
