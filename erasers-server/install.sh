@@ -84,8 +84,8 @@ echo ""
 # ------------------------------------------------------------
 echo "--- [4/4] erasers:// カスタムURLスキームを登録します ---"
 
-DESKTOP_SRC="$SCRIPT_DIR/erasers-task-controller-server-server.desktop"
-DESKTOP_DST="$HOME/.local/share/applications/erasers-task-controller-server-server.desktop"
+DESKTOP_SRC="$SCRIPT_DIR/erasers-task-controller-server.desktop"
+DESKTOP_DST="$HOME/.local/share/applications/erasers-task-controller-server.desktop"
 
 mkdir -p "$HOME/.local/share/applications"
 
@@ -94,7 +94,7 @@ sed "s|Exec=.*start_erasers_task_controller_server.sh|Exec=$SCRIPT_DIR/start_era
   "$DESKTOP_SRC" > "$DESKTOP_DST"
 
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-xdg-mime default erasers-task-controller-server-server.desktop x-scheme-handler/erasers
+xdg-mime default erasers-task-controller-server.desktop x-scheme-handler/erasers
 
 echo "完了"
 echo ""

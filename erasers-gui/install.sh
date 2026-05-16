@@ -10,7 +10,7 @@ docker build -t erasers:gui . || die "Docker build failed"
 log "Docker image built successfully"
 
 # systemd service
-SERVICE_SRC="/home/hsr-hmi/erasers-app/erasers-gui/erasers.gui.service"
+SERVICE_SRC="/home/unitree/erasers-app/erasers-gui/erasers.gui.service"
 SERVICE_DST="/etc/systemd/system/erasers.gui.service"
 
 [ -f "$SERVICE_SRC" ] || die "Service file not found: $SERVICE_SRC"

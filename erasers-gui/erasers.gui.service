@@ -1,7 +1,7 @@
 [Unit]
 Description=eR@sers GUI service
-After=docker.hsrb.monitor.service
-Requires=docker.hsrb.monitor.service
+# After=docker.hsrb.monitor.service
+# Requires=docker.hsrb.monitor.service
 
 [Service]
 ExecStartPre=-/usr/bin/docker rm -f %n
