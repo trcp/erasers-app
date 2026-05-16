@@ -53,28 +53,25 @@ echo "完了"
 echo ""
 
 # ------------------------------------------------------------
-# 3. systemd ユーザーサービスをインストール
+# 3. systemd システムサービスをインストール
 # ------------------------------------------------------------
 echo "--- [3/4] systemd サービスをインストールしますか？ ---"
 read -p "  Task Controller Server をサービス化しますか？ [y/N]: " svc_answer
 case "$svc_answer" in
   [yY] | [yY][eE][sS])
     SERVICE_SRC="$SCRIPT_DIR/erasers-task-controller-server.service"
-    SERVICE_DST_DIR="$HOME/.config/systemd/user"
-    SERVICE_DST="$SERVICE_DST_DIR/erasers-task-controller-server.service"
+    SERVICE_DST="/etc/systemd/system/erasers-task-controller-server.service"
 
-    mkdir -p "$SERVICE_DST_DIR"
-
-    # WorkingDirectory と ExecStart のパスをこのPCの実際のパスに書き換えて配置
+    # ExecStart・User・Group・PYTHONPATH をこのPCの実際の値に書き換えて配置
     sed \
       -e "s|ExecStart=\(/usr/bin/python3\) [^ ]*erasers_task_controller_server\.py|ExecStart=\1 $SCRIPT_DIR/erasers_task_controller_server.py|" \
-      "$SERVICE_SRC" > "$SERVICE_DST"
+      "$SERVICE_SRC" | sudo tee "$SERVICE_DST" > /dev/null
 
-    systemctl --user daemon-reload
-    systemctl --user enable erasers-task-controller-server
+    sudo systemctl daemon-reload
+    sudo systemctl enable erasers-task-controller-server
     echo "完了 (サービス名: erasers-task-controller-server)"
-    echo "  起動: systemctl --user start erasers-task-controller-server"
-    echo "  ログ: journalctl --user -u erasers-task-controller-server -f"
+    echo "  起動: sudo systemctl start erasers-task-controller-server"
+    echo "  ログ: journalctl -u erasers-task-controller-server -f"
     ;;
   *)
     echo "スキップしました。"
