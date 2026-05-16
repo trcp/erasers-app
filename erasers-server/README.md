@@ -9,8 +9,8 @@
 | ファイル | 説明 |
 |---------|------|
 | `erasers_task_controller_server.py` | タスクコントローラーサーバー本体（port 3001） |
-| `start_erasers.sh` | `erasers://` URL を受け取りサーバーをバックグラウンド起動するシェルスクリプト |
-| `erasers-server.desktop` | `erasers://` カスタム URL スキームの登録ファイル |
+| `start_erasers_task_controller_server.sh` | `erasers://` URL を受け取りサーバーをバックグラウンド起動するシェルスクリプト |
+| `erasers-task-controller-server.desktop` | `erasers://` カスタム URL スキームの登録ファイル |
 
 ---
 
@@ -20,7 +20,7 @@
 GUI の "Start Server" ボタンクリック
   → window.location.href = "erasers://start?config=/path/to/config"
   → Chrome: 「外部アプリを開きますか？」ダイアログ
-  → xdg-open → erasers-server.desktop → start_erasers.sh %u
+  → xdg-open → erasers-task-controller-server.desktop → start_erasers_task_controller_server.sh %u
   → python3 erasers_task_controller_server.py --config /path/to/config &
 ```
 
@@ -33,14 +33,14 @@ GUI の "Start Server" ボタンクリック
 ### 1. 実行権限の付与
 
 ```bash
-chmod +x /home/roboworks/erasers-app/erasers-server/start_erasers.sh
+chmod +x /home/roboworks/erasers-app/erasers-server/start_erasers_task_controller_server.sh
 ```
 
 ### 2. `.desktop` ファイルの登録
 
 ```bash
-cp /home/roboworks/erasers-app/erasers-server/erasers-server.desktop ~/.local/share/applications/
-xdg-mime default erasers-server.desktop x-scheme-handler/erasers
+cp /home/roboworks/erasers-app/erasers-server/erasers-task-controller-server.desktop ~/.local/share/applications/
+xdg-mime default erasers-task-controller-server.desktop x-scheme-handler/erasers
 update-desktop-database ~/.local/share/applications/
 ```
 
@@ -48,7 +48,7 @@ update-desktop-database ~/.local/share/applications/
 
 ```bash
 xdg-mime query default x-scheme-handler/erasers
-# 出力: erasers-server.desktop
+# 出力: erasers-task-controller-server.desktop
 ```
 
 ---

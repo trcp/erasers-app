@@ -1,0 +1,14 @@
+[Unit]
+Description=Erasers Task Controller Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/roboworks/work/erasers-app/erasers-server/erasers_task_controller_server.py --config /home/roboworks/erasers_ws/tasks
+Restart=on-failure
+RestartSec=5
+
+# Environment=PYTHONPATH=/home/roboworks/.local/lib/python3.8/site-packages
+
+[Install]
+WantedBy=default.target

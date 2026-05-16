@@ -39,35 +39,65 @@ echo ""
 # ------------------------------------------------------------
 # 1. Python依存パッケージ
 # ------------------------------------------------------------
-echo "--- [1/3] Python パッケージをインストールします ---"
+echo "--- [1/4] Python パッケージをインストールします ---"
 pip3 install --user fastapi uvicorn pydantic lupa
 echo ""
 
 # ------------------------------------------------------------
 # 2. スクリプトに実行権限を付与
 # ------------------------------------------------------------
-echo "--- [2/3] 実行権限を設定します ---"
-chmod +x "$SCRIPT_DIR/start_erasers.sh"
+echo "--- [2/4] 実行権限を設定します ---"
+chmod +x "$SCRIPT_DIR/start_erasers_task_controller_server.sh"
 chmod +x "$SCRIPT_DIR/erasers_task_controller_server.py"
 echo "完了"
 echo ""
 
 # ------------------------------------------------------------
-# 3. erasers:// カスタムURLスキームを登録
+# 3. systemd ユーザーサービスをインストール
 # ------------------------------------------------------------
-echo "--- [3/3] erasers:// カスタムURLスキームを登録します ---"
+echo "--- [3/4] systemd サービスをインストールしますか？ ---"
+read -p "  Task Controller Server をサービス化しますか？ [y/N]: " svc_answer
+case "$svc_answer" in
+  [yY] | [yY][eE][sS])
+    SERVICE_SRC="$SCRIPT_DIR/erasers-task-controller-server.service"
+    SERVICE_DST_DIR="$HOME/.config/systemd/user"
+    SERVICE_DST="$SERVICE_DST_DIR/erasers-task-controller-server.service"
 
-DESKTOP_SRC="$SCRIPT_DIR/erasers-server.desktop"
-DESKTOP_DST="$HOME/.local/share/applications/erasers-server.desktop"
+    mkdir -p "$SERVICE_DST_DIR"
+
+    # WorkingDirectory と ExecStart のパスをこのPCの実際のパスに書き換えて配置
+    sed \
+      -e "s|ExecStart=\(/usr/bin/python3\) [^ ]*erasers_task_controller_server\.py|ExecStart=\1 $SCRIPT_DIR/erasers_task_controller_server.py|" \
+      "$SERVICE_SRC" > "$SERVICE_DST"
+
+    systemctl --user daemon-reload
+    systemctl --user enable erasers-task-controller-server
+    echo "完了 (サービス名: erasers-task-controller-server)"
+    echo "  起動: systemctl --user start erasers-task-controller-server"
+    echo "  ログ: journalctl --user -u erasers-task-controller-server -f"
+    ;;
+  *)
+    echo "スキップしました。"
+    ;;
+esac
+echo ""
+
+# ------------------------------------------------------------
+# 4. erasers:// カスタムURLスキームを登録
+# ------------------------------------------------------------
+echo "--- [4/4] erasers:// カスタムURLスキームを登録します ---"
+
+DESKTOP_SRC="$SCRIPT_DIR/erasers-task-controller-server-server.desktop"
+DESKTOP_DST="$HOME/.local/share/applications/erasers-task-controller-server-server.desktop"
 
 mkdir -p "$HOME/.local/share/applications"
 
 # Exec パスをこのPCの実際のパスに書き換えて配置
-sed "s|Exec=.*start_erasers.sh|Exec=$SCRIPT_DIR/start_erasers.sh|" \
+sed "s|Exec=.*start_erasers_task_controller_server.sh|Exec=$SCRIPT_DIR/start_erasers_task_controller_server.sh|" \
   "$DESKTOP_SRC" > "$DESKTOP_DST"
 
 update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-xdg-mime default erasers-server.desktop x-scheme-handler/erasers
+xdg-mime default erasers-task-controller-server-server.desktop x-scheme-handler/erasers
 
 echo "完了"
 echo ""
