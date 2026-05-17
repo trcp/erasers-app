@@ -16,7 +16,13 @@ import {
     Chip,
     Select,
     MenuItem,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogContentText,
+    DialogActions,
 } from '@mui/material';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import AppLayout from '~/components/AppLayout';
 import VirtualJoystick from '~/components/joystick/VirtualJoystick';
@@ -209,6 +215,8 @@ export default function Controller() {
     );
     const [motionTime, setMotionTime] = useState(3.0);
     const [armStatus, setArmStatus] = useState<'idle' | 'running' | 'done' | 'error'>('idle');
+    const [posePolicyStatus, setPosePolicyStatus] = useState<'idle' | 'calling' | 'done' | 'error'>('idle');
+    const [posePolicyConfirm, setPosePolicyConfirm] = useState<string | null>(null);
 
     const armAcRef = useRef<ROSLIB.ActionClient | null>(null);
     const gripperAcRef = useRef<ROSLIB.ActionClient | null>(null);
@@ -314,6 +322,27 @@ export default function Controller() {
     };
 
     const armStatusColor = armStatus === 'running' ? 'primary' : armStatus === 'done' ? 'success' : armStatus === 'error' ? 'error' : 'default';
+
+    const callPosePolicy = (pose: string) => {
+        setPosePolicyConfirm(pose);
+    };
+
+    const confirmPosePolicy = () => {
+        if (!ros || !robotProfile.posePolicy || !posePolicyConfirm) return;
+        const pose = posePolicyConfirm;
+        setPosePolicyConfirm(null);
+        setPosePolicyStatus('calling');
+        const svc = new ROSLIB.Service({
+            ros,
+            name: robotProfile.posePolicy.serviceName,
+            serviceType: robotProfile.posePolicy.serviceType,
+        });
+        svc.callService(
+            new ROSLIB.ServiceRequest({ pose }),
+            () => setPosePolicyStatus('done'),
+            () => setPosePolicyStatus('error'),
+        );
+    };
 
     const velRef = useRef({ lx: 0, ly: 0, az: 0 });
     const publishIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -442,6 +471,39 @@ export default function Controller() {
                             {cmdVelRef.current && <CardTemplate msg={twist} pubFunc={cmdVelRef.current} />}
                             {nav2dRef.current && <CardTemplate msg={pose_stamped} pubFunc={nav2dRef.current} />}
                             {ttsRef.current && <CardTemplate msg={voice} pubFunc={ttsRef.current} />}
+
+                            {/* Pose Policy — only shown when profile defines posePolicy */}
+                            {robotProfile.posePolicy && (
+                                <Card elevation={2} sx={{ width: 500 }}>
+                                    <CardContent>
+                                        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>Pose Policy</Typography>
+                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                            {robotProfile.posePolicy.serviceType}
+                                        </Typography>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                            {robotProfile.posePolicy.poses.map((pose) => (
+                                                <Button
+                                                    key={pose}
+                                                    variant="outlined"
+                                                    size="small"
+                                                    disabled={posePolicyStatus === 'calling'}
+                                                    onClick={() => callPosePolicy(pose)}
+                                                >
+                                                    {pose}
+                                                </Button>
+                                            ))}
+                                        </Box>
+                                        {posePolicyStatus !== 'idle' && (
+                                            <Chip
+                                                size="small"
+                                                sx={{ mt: 1.5 }}
+                                                label={posePolicyStatus}
+                                                color={posePolicyStatus === 'done' ? 'success' : posePolicyStatus === 'error' ? 'error' : 'default'}
+                                            />
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            )}
 
                             {/* Arm Joints — only shown when profile defines arm */}
                             {robotProfile.arm && (
@@ -621,6 +683,25 @@ export default function Controller() {
                     </TabPanel>
                 </Box>
             </Box>
+            {/* Pose Policy Confirmation Dialog */}
+            <Dialog open={posePolicyConfirm !== null} onClose={() => setPosePolicyConfirm(null)}>
+                <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <WarningAmberIcon color="warning" />
+                    操作確認
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText>
+                        ポーズ <strong>"{posePolicyConfirm}"</strong> をロボットに送信します。<br />
+                        本当に実行しますか？
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPosePolicyConfirm(null)}>キャンセル</Button>
+                    <Button variant="contained" color="warning" onClick={confirmPosePolicy}>
+                        送信する
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </AppLayout>
     );
 }

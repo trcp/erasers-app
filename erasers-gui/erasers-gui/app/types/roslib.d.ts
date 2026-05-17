@@ -44,4 +44,18 @@ declare namespace ROSLIB {
     get(callback: (value: any) => void): void;
     set(value: any, callback?: () => void): void;
   }
+
+  class ServiceRequest {
+    constructor(values?: Record<string, unknown>);
+    [key: string]: unknown;
+  }
+
+  class Service {
+    constructor(options: { ros: Ros; name: string; serviceType: string });
+    callService(
+      request: ServiceRequest,
+      callback: (result: Record<string, unknown>) => void,
+      failedCallback?: (error: unknown) => void
+    ): void;
+  }
 }

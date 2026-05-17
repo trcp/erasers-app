@@ -28,6 +28,12 @@ export interface HeadConfig {
   joints: JointConfig[];
 }
 
+export interface PosePolicyConfig {
+  serviceName: string;
+  serviceType: string;
+  poses: string[];
+}
+
 export interface RobotProfile {
   id: string;
   name: string;
@@ -38,6 +44,7 @@ export interface RobotProfile {
   arm?: ArmConfig;
   gripper?: GripperConfig;
   head?: HeadConfig;
+  posePolicy?: PosePolicyConfig;
 }
 
 export const ROBOT_PROFILES: RobotProfile[] = [
@@ -75,6 +82,19 @@ export const ROBOT_PROFILES: RobotProfile[] = [
         { key: 'pan',  jointName: 'head_pan_joint',  label: 'pan',  min: -3.84, max: 1.75, step: 0.01, unit: 'rad', defaultValue: 0.0 },
         { key: 'tilt', jointName: 'head_tilt_joint', label: 'tilt', min: -0.61, max: 0.35, step: 0.01, unit: 'rad', defaultValue: 0.0 },
       ],
+    },
+  },
+  {
+    id: 'g1',
+    name: 'G1',
+    cmdVelTopic: '/cmd_vel',
+    navGoalTopic: '/goal_pose',
+    ttsTopic: '/talk_request',
+    batteryTopic: '/hsrb/battery_state',
+    posePolicy: {
+      serviceName: '/pose_policy',
+      serviceType: 'g1_srvs/srv/PosePolicy',
+      poses: ['squat', 'stand', 'walk', 'start', 'running', 'damp', 'zero_torque'],
     },
   },
   {
