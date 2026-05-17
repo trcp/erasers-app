@@ -4,6 +4,7 @@ import time
 import os
 import sys
 import subprocess
+import signal
 import logging
 
 from lupa import LuaRuntime
@@ -159,7 +160,7 @@ class NodeData:
                 print('Terminating process group...')
                 try:
                     os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
-                    proc.wait(timeout=1)
+                    self.proc.wait(timeout=1)
                 except subprocess.TimeoutExpired:
                     os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
                     self.proc.wait()

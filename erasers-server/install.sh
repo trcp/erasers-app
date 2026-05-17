@@ -40,7 +40,7 @@ echo ""
 # 1. Python依存パッケージ
 # ------------------------------------------------------------
 echo "--- [1/4] Python パッケージをインストールします ---"
-pip3 install --user fastapi uvicorn pydantic lupa
+pip3 install --user --break-system-packages fastapi uvicorn pydantic lupa
 echo ""
 
 # ------------------------------------------------------------
