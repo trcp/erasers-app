@@ -61,6 +61,7 @@ export function RosProvider({ children }: { children: React.ReactNode }) {
   const rosRef = useRef<ROSLIB.Ros | null>(null);
   const [ros, setRos] = useState<ROSLIB.Ros | null>(null);
   const [rosConnected, setRosConnected] = useState(false);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [profileId, setProfileIdState] = useState<string>(
     () => (typeof window !== 'undefined' ? localStorage.getItem(PROFILE_STORAGE_KEY) : null) ?? DEFAULT_PROFILE_ID
@@ -78,15 +79,31 @@ export function RosProvider({ children }: { children: React.ReactNode }) {
     const instance = new ROSLIB.Ros({ url: buildUrl(hostnameRef.current) });
     rosRef.current = instance;
     setRos(instance);
+
+    const scheduleReconnect = () => {
+      if (reconnectTimerRef.current !== null) return; // already scheduled
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null;
+        instance.connect(buildUrl(hostnameRef.current));
+      }, 3000);
+    };
+
     instance.on('connection', () => setRosConnected(true));
     instance.on('close', () => {
       setRosConnected(false);
-      instance.connect(buildUrl(hostnameRef.current));
+      scheduleReconnect();
     });
     instance.on('error', () => {
       setRosConnected(false);
-      instance.connect(buildUrl(hostnameRef.current));
+      scheduleReconnect();
     });
+
+    return () => {
+      if (reconnectTimerRef.current !== null) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+    };
   }, []);
 
   const setHostname = (host: string) => {
@@ -94,6 +111,10 @@ export function RosProvider({ children }: { children: React.ReactNode }) {
     hostnameRef.current = host;
     setHostnameState(host);
     setRosConnected(false);
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     rosRef.current?.connect(buildUrl(host));
   };
 
