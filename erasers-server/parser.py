@@ -133,11 +133,17 @@ class NodeData:
             # Follow container logs; proc exits when container stops
             self.proc = subprocess.Popen(
                 ["docker", "logs", "-f", self.container_id],
-                stdout=self.log_file, stderr=subprocess.STDOUT
+                stdout=self.log_file, stderr=subprocess.STDOUT,
             )
         else:
             cmd = " ".join(cmd)
-            self.proc = subprocess.Popen(cmd, stdout=self.log_file, stderr=subprocess.STDOUT, env=my_env, shell=True)
+            self.proc = subprocess.Popen(cmd,
+                                         stdout=self.log_file,
+                                         stderr=subprocess.STDOUT,
+                                         env=my_env,
+                                         shell=True,
+                                         start_new_session=True,
+            )
 
         return self.proc
 
@@ -149,6 +155,16 @@ class NodeData:
 
         if self.proc is not None:
             self.proc.terminate()
+            if self.proc.poll() is None:
+                print('Terminating process group...')
+                try:
+                    os.killpg(os.getpgid(self.proc.pid), signal.SIGTERM)
+                    proc.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    os.killpg(os.getpgid(self.proc.pid), signal.SIGKILL)
+                    self.proc.wait()
+                except ProcessLookupError:
+                    pass  # already kill
 
         if self.command.kill != "":
             # cmd = self.command.kill.split()
