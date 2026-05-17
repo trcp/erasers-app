@@ -84,7 +84,7 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
   };
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ display: 'flex', height: { xs: 'auto', md: '100vh' }, minHeight: { xs: '100vh', md: 'auto' }, bgcolor: 'background.default' }}>
 
       {/* Floating open button — visible only when sidebar is closed */}
       {!open && (
@@ -223,7 +223,7 @@ export default function AppLayout({ children, defaultOpen = true }: AppLayoutPro
       </Drawer>
 
       {/* Main content area */}
-      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', transition: 'margin 0.2s ease' }}>
+      <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: { xs: 'visible', md: 'hidden' }, transition: 'margin 0.2s ease' }}>
         {children}
       </Box>
 

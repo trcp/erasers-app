@@ -484,7 +484,7 @@ export default function TaskStarter() {
         </DialogActions>
       </Dialog>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: { xs: 'auto', md: '100%' } }}>
         {/* Header */}
         <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>Task Starter</Typography>
@@ -645,7 +645,7 @@ export default function TaskStarter() {
 
         </Box>
 
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
+        <Box sx={{ flex: { xs: 'none', md: 1 }, overflow: { xs: 'visible', md: 'auto' } }}>
           {taskData && debugChecked && runStatus && Object.keys(taskData).length > 0 ? (
             <>
               <Box sx={{ px: 2, pt: 1, pb: 1, position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
