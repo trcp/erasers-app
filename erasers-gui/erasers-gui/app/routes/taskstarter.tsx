@@ -25,6 +25,8 @@ import {
   ToggleButtonGroup,
   Tooltip,
   Typography,
+  useMediaQuery,
+  useTheme,
 } from '@mui/material';
 import Snackbar from '@mui/material/Snackbar';
 import Alert from '@mui/material/Alert';
@@ -65,6 +67,30 @@ function a11yProps(index: number) {
 }
 
 export default function TaskStarter() {
+
+  const theme = useTheme();
+  const isLg = useMediaQuery(theme.breakpoints.up('lg'));
+
+  const headerRef = useRef<HTMLDivElement>(null);
+  const setupPanelRef = useRef<HTMLDivElement>(null);
+  const [taskListTooSmall, setTaskListTooSmall] = useState(false);
+
+  useEffect(() => {
+    const check = () => {
+      if (!isLg) { setTaskListTooSmall(false); return; }
+      const headerH = headerRef.current?.offsetHeight ?? 0;
+      const setupH = setupPanelRef.current?.offsetHeight ?? 0;
+      setTaskListTooSmall(window.innerHeight - headerH - setupH < 300);
+    };
+    const observer = new ResizeObserver(check);
+    if (headerRef.current) observer.observe(headerRef.current);
+    if (setupPanelRef.current) observer.observe(setupPanelRef.current);
+    window.addEventListener('resize', check);
+    check();
+    return () => { observer.disconnect(); window.removeEventListener('resize', check); };
+  }, [isLg]);
+
+  const useNativeScroll = !isLg || taskListTooSmall;
 
   const { hostname } = useRos();
   const {
@@ -435,7 +461,7 @@ export default function TaskStarter() {
   };
 
   return (
-    <AppLayout>
+    <AppLayout nativeScroll={useNativeScroll}>
       <LogModal openModal={openLogModal} serverIp={serverIp} />
       <Snackbar
         open={!!crashAlert}
@@ -484,14 +510,14 @@ export default function TaskStarter() {
         </DialogActions>
       </Dialog>
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: { xs: 'auto', md: '100%' } }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: useNativeScroll ? 'auto' : '100%' }}>
         {/* Header */}
-        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+        <Box ref={headerRef} sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
           <Typography variant="h5" sx={{ fontWeight: 700, color: '#1565C0' }}>Task Starter</Typography>
         </Box>
 
         {/* Setup Panel */}
-        <Box sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', alignItems: 'flex-start', gap: 0, flexWrap: 'wrap' }}>
+        <Box ref={setupPanelRef} sx={{ px: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'grey.50', display: 'flex', alignItems: 'flex-start', gap: 0, flexWrap: 'wrap' }}>
 
           {/* Task Controller Server */}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, pr: 3 }}>
@@ -645,7 +671,7 @@ export default function TaskStarter() {
 
         </Box>
 
-        <Box sx={{ flex: { xs: 'none', md: 1 }, overflow: { xs: 'visible', md: 'auto' } }}>
+        <Box sx={{ flex: useNativeScroll ? 'none' : 1, overflow: useNativeScroll ? 'visible' : 'auto' }}>
           {taskData && debugChecked && runStatus && Object.keys(taskData).length > 0 ? (
             <>
               <Box sx={{ px: 2, pt: 1, pb: 1, position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
