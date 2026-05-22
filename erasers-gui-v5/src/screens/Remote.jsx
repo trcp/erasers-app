@@ -206,36 +206,27 @@ function defaultPayload(type) {
   }
 }
 
-function synthesizeMsg(type) {
-  const r = (n = 2) => (Math.random() * 2 - 1).toFixed(n)
-  switch (type) {
-    case "std_msgs/String":   return JSON.stringify({ data: ["OK", "running", "idle", "moving"][Math.floor(Math.random() * 4)] })
-    case "std_msgs/Float64":  return JSON.stringify({ data: parseFloat(r(3)) })
-    case "geometry_msgs/Twist":
-      return JSON.stringify({ linear: { x: +r(), y: 0, z: 0 }, angular: { x: 0, y: 0, z: +r() } })
-    case "sensor_msgs/Imu":
-      return JSON.stringify({ orientation: { x: +r(3), y: +r(3), z: +r(3), w: +r(3) }, angular_velocity: { x: +r(3), y: +r(3), z: +r(3) } })
-    case "nav_msgs/Odometry":
-      return JSON.stringify({ pose: { position: { x: +r(2), y: +r(2), z: 0 } }, twist: { linear: { x: +r() } } })
-    default: return JSON.stringify({ data: "..." })
-  }
-}
-
 function SubscribeView({ topic }) {
+  const [messages, setMessages] = useState([])
   const ref = useRef(null)
-  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight }, [topic.messages?.length])
-  const msgs = topic.messages || []
+  useEffect(() => { if (ref.current) ref.current.scrollTop = ref.current.scrollHeight }, [messages.length])
+
+  const { message } = useRosTopic(topic.name, topic.type, 'subscribe', 0, topic.active)
+  useEffect(() => {
+    if (!message) return
+    setMessages(prev => [...prev.slice(-49), { time: new Date(), data: JSON.stringify(message) }])
+  }, [message])
+
   return (
     <div>
       <div style={{ display: "flex", gap: 10, marginBottom: 10, fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)", flexWrap: "wrap" }}>
-        <span>受信: <span style={{ color: "var(--ink)" }}>{msgs.length}</span></span>
-        <span>レート: <span style={{ color: "var(--ink)" }}>{topic.active ? "~1.0 Hz" : "停止"}</span></span>
+        <span>受信: <span style={{ color: "var(--ink)" }}>{messages.length}</span></span>
         <span>状態: <span style={{ color: topic.active ? "var(--ok)" : "var(--ink-3)" }}>{topic.active ? "● ACTIVE" : "○ PAUSED"}</span></span>
       </div>
       <div ref={ref} className="msg-console">
-        {msgs.length === 0 ? (
+        {messages.length === 0 ? (
           <div style={{ color: "#666", padding: 12 }}>// 待機中...</div>
-        ) : msgs.slice(-30).map((m, i) => (
+        ) : messages.slice(-30).map((m, i) => (
           <div key={i} className="msg-line">
             <span className="msg-time">{m.time.toLocaleTimeString("ja-JP", { hour12: false })}.{String(m.time.getMilliseconds()).padStart(3, "0")}</span>
             <pre className="msg-data">{m.data}</pre>
@@ -353,23 +344,6 @@ function TopicsTab({ topics, setTopics, connected }) {
   const [showAdd, setShowAdd] = useState(false)
   const [selectedId, setSelectedId] = useState(topics[0]?.id)
   const selected = topics.find(t => t.id === selectedId) || topics[0]
-  const { status } = useRos()
-
-  // Simulate messages when connected (rosbridge) - real subscription handled per topic in PublishView/SubscribeView
-  useEffect(() => {
-    if (status !== 'connected' && !connected) return
-    const id = setInterval(() => {
-      setTopics(prev => prev.map(t => {
-        if (t.direction !== "sub" || !t.active) return t
-        return { ...t, messages: [...(t.messages || []).slice(-49), {
-          time: new Date(),
-          data: synthesizeMsg(t.type),
-        }] }
-      }))
-    }, 1100)
-    return () => clearInterval(id)
-  }, [status, connected])
-
   const addTopic = (topic) => {
     const newId = Date.now()
     setTopics(prev => [...prev, { ...topic, id: newId, active: true, messages: [] }])
@@ -425,9 +399,9 @@ function TopicsTab({ topics, setTopics, connected }) {
             左側のリストからトピックを選択してください
           </div>
         ) : selected.direction === "sub" ? (
-          <SubscribeView topic={selected} />
+          <SubscribeView key={selected.id} topic={selected} />
         ) : (
-          <PublishView topic={selected} setTopics={setTopics} />
+          <PublishView key={selected.id} topic={selected} setTopics={setTopics} />
         )}
       </Section>
 

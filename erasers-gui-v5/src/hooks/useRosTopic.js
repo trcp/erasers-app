@@ -2,13 +2,13 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import ROSLIB from 'roslib'
 import { useRos } from '../context/RosContext'
 
-export function useRosTopic(name, messageType, mode = 'subscribe', throttleRate = 0) {
+export function useRosTopic(name, messageType, mode = 'subscribe', throttleRate = 0, enabled = true) {
   const { ros, status } = useRos()
   const topicRef = useRef(null)
   const [message, setMessage] = useState(null)
 
   useEffect(() => {
-    if (!ros.current || status !== 'connected') {
+    if (!ros.current || status !== 'connected' || !enabled) {
       topicRef.current = null
       return
     }
@@ -30,7 +30,7 @@ export function useRosTopic(name, messageType, mode = 'subscribe', throttleRate 
       }
       topicRef.current = null
     }
-  }, [name, messageType, mode, status])
+  }, [name, messageType, mode, status, enabled])
 
   const publish = useCallback((msgData) => {
     if (!topicRef.current) return

@@ -1,5 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import I from '../icons.jsx'
+import { useRosTopic } from '../hooks/useRosTopic'
+
+const ROSOUT_LEVEL = { 10: 'debug', 20: 'info', 30: 'warn', 40: 'err', 50: 'err' }
 
 const logSeed = [
   ["info",  "/nav",     "Path computed: 247 waypoints, 18.4m"],
@@ -28,17 +31,19 @@ export function Logs() {
     })
   })
 
+  const autoRef = useRef(auto)
+  useEffect(() => { autoRef.current = auto }, [auto])
+
+  const { message: rosoutMsg } = useRosTopic('/rosout', 'rcl_interfaces/msg/Log')
   useEffect(() => {
-    if (!auto) return
-    const id = setInterval(() => {
-      setLines(prev => {
-        const seed = logSeed[Math.floor(Math.random() * logSeed.length)]
-        const next = { time: new Date(), level: seed[0], src: seed[1], msg: seed[2] }
-        return [...prev.slice(-80), next]
-      })
-    }, 2400)
-    return () => clearInterval(id)
-  }, [auto])
+    if (!rosoutMsg || !autoRef.current) return
+    const level = ROSOUT_LEVEL[rosoutMsg.level] ?? 'info'
+    const src   = rosoutMsg.name?.split('/').filter(Boolean).pop() ?? rosoutMsg.name ?? '?'
+    const time  = rosoutMsg.stamp
+      ? new Date(rosoutMsg.stamp.sec * 1000 + Math.floor(rosoutMsg.stamp.nanosec / 1e6))
+      : new Date()
+    setLines(prev => [...prev.slice(-80), { time, level, src, msg: rosoutMsg.msg }])
+  }, [rosoutMsg])
 
   const filtered = lines.filter(l =>
     (level === "all" || l.level === level) &&

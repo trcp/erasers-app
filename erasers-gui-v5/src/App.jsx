@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AppProvider, useAppContext } from './context/AppContext'
 import { RosProvider, useRos } from './context/RosContext'
+import { useRosTopic } from './hooks/useRosTopic'
 import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakSelect } from './components/TweaksPanel'
 import { Speech, UtteranceOverlay } from './screens/Speech'
 import { Remote } from './screens/Remote'
@@ -148,6 +149,59 @@ function TweaksContent() {
   )
 }
 
+function RosSync() {
+  const { setTelemetry, setUtterances, setOverlayUtterance, screen } = useAppContext()
+  const screenRef = useRef(screen)
+  useEffect(() => { screenRef.current = screen }, [screen])
+
+  const { message: battMsg }   = useRosTopic('/battery_state', 'sensor_msgs/BatteryState')
+  const { message: odomMsg }   = useRosTopic('/odom', 'nav_msgs/Odometry', 'subscribe', 100)
+  const { message: tempMsg }   = useRosTopic('/temperature', 'sensor_msgs/Temperature')
+  const { message: cpuMsg }    = useRosTopic('/cpu_usage', 'std_msgs/Float64')
+  const { message: wifiMsg }   = useRosTopic('/wifi_signal', 'std_msgs/Int32')
+  const { message: speechMsg } = useRosTopic('/robot/speech', 'std_msgs/String')
+
+  useEffect(() => {
+    if (battMsg == null) return
+    setTelemetry(prev => ({ ...prev, battery: battMsg.percentage * 100 }))
+  }, [battMsg])
+
+  useEffect(() => {
+    if (!odomMsg) return
+    const { x, y, z, w } = odomMsg.pose.pose.orientation
+    const yaw = Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+    setTelemetry(prev => ({
+      ...prev,
+      speed: Math.abs(odomMsg.twist.twist.linear.x),
+      pose: { x: odomMsg.pose.pose.position.x, y: odomMsg.pose.pose.position.y, t: yaw },
+    }))
+  }, [odomMsg])
+
+  useEffect(() => {
+    if (!tempMsg) return
+    setTelemetry(prev => ({ ...prev, temp: tempMsg.temperature }))
+  }, [tempMsg])
+
+  useEffect(() => {
+    if (cpuMsg == null) return
+    setTelemetry(prev => ({ ...prev, cpu: cpuMsg.data }))
+  }, [cpuMsg])
+
+  useEffect(() => {
+    if (wifiMsg == null) return
+    setTelemetry(prev => ({ ...prev, signal: wifiMsg.data }))
+  }, [wifiMsg])
+
+  useEffect(() => {
+    if (!speechMsg) return
+    const u = { id: Date.now() + Math.random(), text: speechMsg.data, time: new Date(), source: 'auto' }
+    setUtterances(prev => [u, ...prev].slice(0, 50))
+    if (screenRef.current === 'speech') setOverlayUtterance(u)
+  }, [speechMsg])
+
+  return null
+}
+
 function AppShell() {
   const {
     tweaks, screen, setScreen,
@@ -177,6 +231,7 @@ function AppShell() {
 
   return (
     <>
+      <RosSync />
       <div className="shell" data-screen={screen}>
         <TopBar onMenu={() => setMenuOpen(true)} />
         <main className="main" data-screen={screen}>{body}</main>
