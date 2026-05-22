@@ -16,34 +16,6 @@ function Section({ title, sub, tools, children, style }) {
   )
 }
 
-function SettingsSelect({ label, options }) {
-  return (
-    <label style={{ display: "grid", gap: 4, marginBottom: 10 }}>
-      <span className="form-label">{label}</span>
-      <select className="input">{options.map(o => <option key={o}>{o}</option>)}</select>
-    </label>
-  )
-}
-
-function SettingsToggle({ label, defaultOn }) {
-  const [on, setOn] = useState(!!defaultOn)
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10, fontSize: 13 }}>
-      <span style={{ color: "var(--ink-2)" }}>{label}</span>
-      <button onClick={() => setOn(o => !o)} style={{
-        width: 36, height: 20, borderRadius: 999,
-        background: on ? "var(--accent)" : "var(--border-2)",
-        position: "relative", transition: "background .2s",
-      }}>
-        <span style={{
-          position: "absolute", top: 2, left: on ? 18 : 2,
-          width: 16, height: 16, borderRadius: "50%", background: "#fff",
-          transition: "left .2s", boxShadow: "0 1px 2px rgba(0,0,0,0.2)",
-        }} />
-      </button>
-    </div>
-  )
-}
 
 function SettingsSlider({ label, value, min, max, step, unit, onChange }) {
   return (
@@ -80,13 +52,17 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
   const [newPc, setNewPc] = useState({ name: "", host: "" })
   const addPc = () => {
     if (!newPc.name || !newPc.host) return
-    setPcs(prev => [...prev, { ...newPc, id: "pc-" + Date.now(), online: true }])
+    const id = "pc-" + Date.now()
+    setPcs(prev => {
+      const next = [...prev, { ...newPc, id, online: true }]
+      if (!activePc) setActivePc(id)
+      return next
+    })
     setNewPc({ name: "", host: "" })
   }
   const removePc = (id) => {
-    if (pcs.length <= 1) return alert("最低1台のPCが必要です")
     setPcs(prev => prev.filter(p => p.id !== id))
-    if (activePc === id) setActivePc(pcs.find(p => p.id !== id)?.id)
+    if (activePc === id) setActivePc(pcs.find(p => p.id !== id)?.id ?? null)
   }
   const togglePc = (id) => setPcs(prev => prev.map(p => p.id === id ? { ...p, online: !p.online } : p))
 
@@ -183,12 +159,6 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         </div>
       </Section>
 
-      <Section title="一般">
-        <SettingsSelect label="UI言語" options={["日本語", "English", "中文"]} />
-        <SettingsSelect label="タイムゾーン" options={["Asia/Tokyo (UTC+9)", "UTC", "America/Los_Angeles"]} />
-        <SettingsToggle label="自動再接続" defaultOn />
-        <SettingsToggle label="効果音" />
-      </Section>
     </div>
   )
 }

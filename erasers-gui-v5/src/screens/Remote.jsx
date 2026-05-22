@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import I from '../icons.jsx'
 import { MODES_BY_ROBOT, ROBOT_TYPE_LABELS } from '../constants/robotModes.js'
 import { useRosTopic } from '../hooks/useRosTopic'
+import { useRosService } from '../hooks/useRosService'
 import { useRos } from '../context/RosContext'
 
 function Section({ title, sub, tools, children, style }) {
@@ -148,9 +149,48 @@ function TeleopTab({ telemetry, controls, setControls }) {
   )
 }
 
+function ModeConfirmModal({ mode, onConfirm, onCancel }) {
+  const Icon = I[mode.icon] || I.power
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 360 }}>
+        <div className="modal-head">
+          <div className="modal-title">モード切替の確認</div>
+          <button className="icon-btn" onClick={onCancel}><I.x size={14} /></button>
+        </div>
+        <div className="modal-body" style={{ textAlign: "center", padding: "20px 24px" }}>
+          <div style={{ marginBottom: 12, color: "var(--ink-3)", fontSize: 12 }}>以下のモードに切り替えます</div>
+          <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 8,
+            padding: "16px 24px", background: "var(--surface-2)", borderRadius: 10, border: "1px solid var(--border)", minWidth: 140 }}>
+            <Icon size={28} />
+            <div style={{ fontWeight: 700, fontSize: 15 }}>{mode.label}</div>
+            {mode.sub && <div style={{ fontSize: 11, color: "var(--ink-3)" }}>{mode.sub}</div>}
+          </div>
+        </div>
+        <div className="modal-foot">
+          <button className="btn" onClick={onCancel}>キャンセル</button>
+          <button className={`btn primary ${mode.tone || ""}`} onClick={onConfirm}><I.check size={14} /> 切り替える</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ModeTab({ robotType, mode, setMode }) {
+  const [pending, setPending] = useState(null)
   const groups = MODES_BY_ROBOT[robotType] || MODES_BY_ROBOT.AMR
   const allModes = groups.flatMap(g => g.modes)
+
+  const handleClick = (m) => {
+    if (m.id === mode) return
+    setPending(m)
+  }
+
+  const confirm = () => {
+    setMode(pending.id)
+    setPending(null)
+  }
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <Section title="モード選択" sub={`${ROBOT_TYPE_LABELS[robotType] || robotType} · ${allModes.length} MODES`}>
@@ -167,7 +207,7 @@ function ModeTab({ robotType, mode, setMode }) {
                   const Icon = I[m.icon] || I.power
                   const isActive = m.id === mode
                   return (
-                    <button key={m.id} onClick={() => setMode(m.id)}
+                    <button key={m.id} onClick={() => handleClick(m)}
                       className={`mode-card ${isActive ? "active" : ""} ${m.tone || ""}`}>
                       <div className="mode-card-icon"><Icon size={20} /></div>
                       <div className="mode-card-label">{m.label}</div>
@@ -181,6 +221,7 @@ function ModeTab({ robotType, mode, setMode }) {
           ))}
         </div>
       </Section>
+      {pending && <ModeConfirmModal mode={pending} onConfirm={confirm} onCancel={() => setPending(null)} />}
     </div>
   )
 }
@@ -294,10 +335,38 @@ function AddTopicModal({ onAdd, onCancel }) {
   const [name, setName] = useState("/")
   const [type, setType] = useState("std_msgs/String")
   const [direction, setDirection] = useState("sub")
+  const [rosTopics, setRosTopics] = useState([])
+  const [loading, setLoading] = useState(false)
+  const { status } = useRos()
+  const { call } = useRosService('/rosapi/topics', 'rosapi/Topics')
+
+  useEffect(() => {
+    if (status !== 'connected') return
+    setLoading(true)
+    call({})
+      .then(res => {
+        if (res?.topics && res?.types) {
+          setRosTopics(res.topics.map((n, i) => ({ name: n, type: res.types[i] })))
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [status])
+
+  const topicTypeMap = Object.fromEntries(rosTopics.map(t => [t.name, t.type]))
+  const allTypes = [...new Set([...COMMON_TYPES, ...rosTopics.map(t => t.type)])]
+
+  const handleNameChange = (e) => {
+    const n = e.target.value
+    setName(n)
+    if (topicTypeMap[n]) setType(topicTypeMap[n])
+  }
+
   const submit = () => {
     if (!name.trim() || name === "/") return alert("トピック名を入力してください")
     onAdd({ name, type, direction })
   }
+
   return (
     <div className="modal-backdrop" onClick={onCancel}>
       <div className="modal" onClick={e => e.stopPropagation()}>
@@ -314,14 +383,23 @@ function AddTopicModal({ onAdd, onCancel }) {
             </div>
           </label>
           <label style={{ display: "grid", gap: 4, marginBottom: 12 }}>
-            <span className="form-label">トピック名</span>
-            <input className="input mono" value={name} onChange={e => setName(e.target.value)} placeholder="/cmd_vel" autoFocus />
+            <span className="form-label">
+              トピック名
+              {loading && <span style={{ marginLeft: 6, color: "var(--ink-3)", fontSize: 10 }}>取得中...</span>}
+              {!loading && rosTopics.length > 0 && (
+                <span style={{ marginLeft: 6, color: "var(--ink-3)", fontSize: 10 }}>{rosTopics.length} トピック取得済み</span>
+              )}
+            </span>
+            <input className="input mono" list="ros-topic-names" value={name} onChange={handleNameChange} placeholder="/cmd_vel" autoFocus />
+            <datalist id="ros-topic-names">
+              {rosTopics.map(t => <option key={t.name} value={t.name} label={t.type} />)}
+            </datalist>
           </label>
           <label style={{ display: "grid", gap: 4, marginBottom: 12 }}>
             <span className="form-label">メッセージ型</span>
             <input className="input mono" list="topic-types" value={type} onChange={e => setType(e.target.value)} />
             <datalist id="topic-types">
-              {COMMON_TYPES.map(t => <option key={t} value={t} />)}
+              {allTypes.map(t => <option key={t} value={t} />)}
             </datalist>
           </label>
           <div style={{ fontSize: 10, color: "var(--ink-3)", fontFamily: "var(--mono)" }}>プリセット:</div>

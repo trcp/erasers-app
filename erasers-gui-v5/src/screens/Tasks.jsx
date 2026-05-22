@@ -49,6 +49,26 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
     }))
   }
 
+  if (pcs.length === 0) {
+    return (
+      <div style={{ display: "grid", gap: 14 }}>
+        <div className="page-head">
+          <div>
+            <h2 className="page-title">タスク管理</h2>
+            <div className="page-sub">PROGRAM_LAUNCHER</div>
+          </div>
+        </div>
+        <div className="card">
+          <div className="card-body" style={{ padding: "48px 24px", textAlign: "center", display: "grid", gap: 12, justifyItems: "center" }}>
+            <I.pc size={32} style={{ color: "var(--ink-3)" }} />
+            <div style={{ fontSize: 15, fontWeight: 600, color: "var(--ink-2)" }}>PCが登録されていません</div>
+            <div style={{ fontSize: 13, color: "var(--ink-3)" }}>設定画面からPCを追加してください</div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div className="page-head">

@@ -204,7 +204,7 @@ function RosSync() {
 
 function AppShell() {
   const {
-    tweaks, screen, setScreen,
+    tweaks, setTweak, screen, setScreen,
     telemetry, controls, setControls,
     mode, setMode, waypoints, setWaypoints,
     utterances, setUtterances, overlayUtterance, setOverlayUtterance,

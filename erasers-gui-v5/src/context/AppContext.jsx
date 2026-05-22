@@ -39,29 +39,25 @@ export function AppProvider({ children }) {
     return () => window.removeEventListener("keydown", k)
   }, [overlayUtterance])
 
-  const [pcs, setPcs] = useState([
-    { id: "pc-1", name: "robot-pc-01",  host: "192.168.1.20", os: "Ubuntu 22.04", rosVersion: "ROS2 Humble", online: true },
-    { id: "pc-2", name: "robot-pc-02",  host: "192.168.1.21", os: "Ubuntu 22.04", rosVersion: "ROS2 Humble", online: true },
-    { id: "pc-3", name: "operator-mac", host: "192.168.1.30", os: "macOS 14",     rosVersion: "ROS2 Iron",   online: false },
-  ])
-  const [activePc, setActivePc]   = useState("pc-1")
+  const [pcs, setPcs] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('erasers.pcs')) || [] } catch { return [] }
+  })
+  const [activePc, setActivePc] = useState(() => localStorage.getItem('erasers.activePc') || null)
   const [rosbridge, setRosbridge] = useState({ host: "192.168.1.10", port: "9090", ssl: false })
 
-  const [runningTasks, setRunningTasks] = useState({
-    "pc-1": [
-      { id: "p4", pkg: "rosbridge_server", file: "rosbridge_websocket.launch", startedAt: new Date(Date.now() - 1200000), pid: 12453 },
-      { id: "p6", pkg: "robot_state_pub",  file: "rsp.launch.py",              startedAt: new Date(Date.now() - 1100000), pid: 12891 },
-    ],
-    "pc-2": [],
-    "pc-3": [],
-  })
+  useEffect(() => { localStorage.setItem('erasers.pcs', JSON.stringify(pcs)) }, [pcs])
+  useEffect(() => {
+    if (activePc) localStorage.setItem('erasers.activePc', activePc)
+  }, [activePc])
 
-  const [topics, setTopics] = useState([
-    { id: 101, name: "/cmd_vel",      type: "geometry_msgs/Twist",   direction: "pub", active: true, messages: [] },
-    { id: 102, name: "/odom",         type: "nav_msgs/Odometry",     direction: "sub", active: true, messages: [] },
-    { id: 103, name: "/scan",         type: "sensor_msgs/LaserScan", direction: "sub", active: true, messages: [] },
-    { id: 104, name: "/robot/speech", type: "std_msgs/String",       direction: "sub", active: true, messages: [] },
-  ])
+  const [runningTasks, setRunningTasks] = useState({})
+
+  const [topics, setTopics] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('erasers.topics')) || [] } catch { return [] }
+  })
+  useEffect(() => {
+    localStorage.setItem('erasers.topics', JSON.stringify(topics.map(t => ({ ...t, messages: [] }))))
+  }, [topics])
 
   const value = {
     tweaks, setTweak,
