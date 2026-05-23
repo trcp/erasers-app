@@ -4,6 +4,7 @@ import I from '../icons.jsx'
 import { defaultPresets } from '../constants/defaultPresets.js'
 import { useRos } from '../context/RosContext'
 import { useAppContext } from '../context/AppContext'
+import { getServerUrl, fetchNetworkInterfaces, fetchExecutionConfig, saveExecutionConfig } from '../services/erasersApi.js'
 
 const ROS_PRIMITIVES = {
   bool: false,
@@ -50,6 +51,77 @@ function Section({ title, sub, tools, children, style }) {
         {tools ? <div style={{ marginLeft: sub ? 10 : "auto", display: "flex", gap: 6 }}>{tools}</div> : null}
       </div>
       <div className="card-body">{children}</div>
+    </div>
+  )
+}
+
+function RosConfigModal({ pc, onClose }) {
+  const [networkIfs, setNetworkIfs] = useState([])
+  const [rosConfig, setRosConfig]   = useState({ network_if: "", ros_master_uri: "localhost" })
+  const [loading, setLoading]       = useState(true)
+  const [error, setError]           = useState(null)
+
+  useEffect(() => {
+    if (!pc.online) { setLoading(false); return }
+    const base = getServerUrl(pc)
+    Promise.all([fetchNetworkInterfaces(base), fetchExecutionConfig(base)])
+      .then(([nifs, cfg]) => {
+        setNetworkIfs(nifs.interfaces)
+        setRosConfig({ network_if: cfg.network_if, ros_master_uri: cfg.ros_master_uri })
+      })
+      .catch(e => setError(e.message))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const handleClose = async () => {
+    if (pc.online) {
+      try {
+        await saveExecutionConfig(getServerUrl(pc), rosConfig)
+      } catch { /* 閉じる操作は止めない */ }
+    }
+    onClose()
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={handleClose}>
+      <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-head">
+          <div className="modal-title">ROS1 実行設定 — {pc.name}</div>
+          <button className="icon-btn" onClick={handleClose}><I.x size={16} /></button>
+        </div>
+        <div className="modal-body">
+          {loading ? (
+            <div style={{ fontSize: 13, color: "var(--ink-3)", padding: "12px 0" }}>取得中...</div>
+          ) : !pc.online ? (
+            <div style={{ fontSize: 13, color: "var(--ink-3)", padding: "12px 0" }}>PCがオフラインのため設定できません</div>
+          ) : (
+            <div style={{ display: "grid", gap: 14 }}>
+              <label style={{ display: "grid", gap: 4 }}>
+                <span className="form-label">ネットワークインターフェース（ROS_IP の取得元）</span>
+                <select className="input mono" value={rosConfig.network_if}
+                  onChange={e => setRosConfig(p => ({ ...p, network_if: e.target.value }))}>
+                  {networkIfs.map(n => (
+                    <option key={n.name} value={n.name}>{n.name} — {n.ip}</option>
+                  ))}
+                </select>
+              </label>
+              <label style={{ display: "grid", gap: 4 }}>
+                <span className="form-label">ROS_MASTER_URI</span>
+                <input className="input mono" value={rosConfig.ros_master_uri}
+                  placeholder="例: localhost, hsrb80, 192.168.11.80"
+                  onChange={e => setRosConfig(p => ({ ...p, ros_master_uri: e.target.value }))} />
+                <span style={{ fontSize: 11, color: "var(--ink-3)" }}>
+                  エイリアス（hsrb80, hsrb33, localhost）または IP アドレスを直接入力
+                </span>
+              </label>
+              {error && <div style={{ fontSize: 12, color: "var(--danger)" }}>{error}</div>}
+            </div>
+          )}
+        </div>
+        <div className="modal-foot">
+          <button className="btn primary sm" onClick={handleClose}><I.check size={12} /> 保存して閉じる</button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -319,8 +391,22 @@ function ModeEditModal({ initial, onSave, onCancel }) {
 export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, setPcs, activePc, setActivePc, robotType, setRobotType }) {
   const [host, setHost] = useState(rosbridge.host)
   const [port, setPort] = useState(rosbridge.port)
-  const { status } = useRos()
-  const { checkPcStatus, robotPresets, setRobotPresets, activePreset } = useAppContext()
+  const { ros, status } = useRos()
+  const { checkPcStatus, robotPresets, setRobotPresets, activePreset, rosConfigs, loadRosConfig } = useAppContext()
+  const connected = status === 'connected'
+
+  const [rosTopics, setRosTopics] = useState([])
+  const callRosapi = useCallback((name, serviceType, request) => new Promise((resolve, reject) => {
+    if (!ros.current) { reject(new Error('not connected')); return }
+    const svc = new ROSLIB.Service({ ros: ros.current, name, serviceType })
+    svc.callService(new ROSLIB.ServiceRequest(request), resolve, reject)
+  }), [ros])
+  useEffect(() => {
+    if (!connected) { setRosTopics([]); return }
+    callRosapi('/rosapi/topics', 'rosapi/Topics', {})
+      .then(r => { if (r?.topics) setRosTopics(r.topics.map((n, i) => ({ name: n, type: r.types[i] }))) })
+      .catch(() => {})
+  }, [connected])
 
   const save = () => setRosbridge({ host, port, ssl: false })
   const url = `ws://${host}:${port}`
@@ -350,6 +436,8 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
     if (activePc === id) setActivePc(pcs.find(p => p.id !== id)?.id ?? null)
   }
 
+  const [rosModalPc, setRosModalPc] = useState(null)
+
   // --- Preset editor state ---
   const [editModal, setEditModal]     = useState(null) // { groupIdx, modeIdx } or null
   const [addingGroup, setAddingGroup] = useState(false)
@@ -368,8 +456,18 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
     updatePreset(p => ({ ...p, speech: { ...p.speech, [field]: value } }))
   }
 
+  const updateBattery = (field, value) => {
+    updatePreset(p => ({ ...p, battery: { ...p.battery, [field]: value } }))
+  }
+
   const updateCmdVel = (field, value) => {
     updatePreset(p => ({ ...p, cmdVel: { ...p.cmdVel, [field]: value } }))
+  }
+
+  const handleTopicChange = (updater, value) => {
+    updater('topic', value)
+    const found = rosTopics.find(t => t.name === value)
+    if (found) updater('msgType', found.type)
   }
 
   const addGroup = (name) => {
@@ -512,12 +610,18 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontWeight: 600, fontSize: 13 }}>{pc.name}</div>
                 <div className="mono" style={{ fontSize: 10, color: "var(--ink-3)" }}>{pc.host}</div>
+                {rosConfigs[pc.id] && (
+                  <div className="mono" style={{ fontSize: 10, color: "var(--ink-3)", marginTop: 2 }}>
+                    {rosConfigs[pc.id].network_if} {rosConfigs[pc.id].ip ? `(${rosConfigs[pc.id].ip})` : ""} · {rosConfigs[pc.id].ros_master_uri}
+                  </div>
+                )}
               </div>
               {activePc === pc.id ? (
                 <span className="chip" style={{ background: "var(--accent-2)", color: "var(--accent)", borderColor: "transparent" }}>使用中</span>
               ) : (
                 <button className="btn sm" onClick={() => setActivePc(pc.id)}>選択</button>
               )}
+              <button className="btn sm" onClick={() => setRosModalPc(pc)}><I.settings size={12} /> ROS1</button>
               <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => removePc(pc.id)}><I.trash size={12} /></button>
             </div>
           ))}
@@ -531,6 +635,8 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
           </div>
         </div>
       </Section>
+
+      {rosModalPc && <RosConfigModal pc={rosModalPc} onClose={() => { loadRosConfig(rosModalPc); setRosModalPc(null) }} />}
 
       {/* Preset editor — ロボットタイプが選択されているときのみ表示 */}
       {robotPresets[robotType] && <Section
@@ -552,7 +658,7 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }} className="rosbridge-form">
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>トピック</span>
-              <input className="input mono" value={activePreset?.speech?.topic ?? ''} onChange={e => updateSpeech('topic', e.target.value)} placeholder="/robot/speech" />
+              <input className="input mono" list="preset-topic-names" value={activePreset?.speech?.topic ?? ''} onChange={e => handleTopicChange(updateSpeech, e.target.value)} placeholder="/robot/speech" />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>メッセージ型</span>
@@ -564,13 +670,31 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
           </div>
         </div>
 
+        {/* Battery config */}
+        <div style={{ marginBottom: 16 }}>
+          <div className="form-label" style={{ marginBottom: 8 }}>バッテリー · 受信トピック</div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>トピック</span>
+              <input className="input mono" list="preset-topic-names" value={activePreset?.battery?.topic ?? ''} onChange={e => handleTopicChange(updateBattery, e.target.value)} placeholder="/battery_state" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>メッセージ型</span>
+              <input className="input mono" value={activePreset?.battery?.msgType ?? ''} onChange={e => updateBattery('msgType', e.target.value)} placeholder="sensor_msgs/BatteryState" />
+            </label>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+            BatteryState: percentage (0–1) · Float32/64: data (0–100)
+          </div>
+        </div>
+
         {/* CmdVel config */}
         <div style={{ marginBottom: 16 }}>
           <div className="form-label" style={{ marginBottom: 8 }}>速度指令 · トピック</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>トピック</span>
-              <input className="input mono" value={activePreset?.cmdVel?.topic ?? ''} onChange={e => updateCmdVel('topic', e.target.value)} placeholder="/cmd_vel" />
+              <input className="input mono" list="preset-topic-names" value={activePreset?.cmdVel?.topic ?? ''} onChange={e => handleTopicChange(updateCmdVel, e.target.value)} placeholder="/cmd_vel" />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
               <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>メッセージ型</span>
@@ -642,6 +766,10 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
           )}
         </div>
       </Section>}
+
+      <datalist id="preset-topic-names">
+        {rosTopics.map(t => <option key={t.name} value={t.name}>{t.type}</option>)}
+      </datalist>
 
       {/* Mode edit modal */}
       {editModal && (

@@ -17,12 +17,17 @@ function Section({ title, sub, tools, children, style }) {
 }
 
 export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActivePc }) {
-  const { screen } = useAppContext()
+  const { screen, rosConfigs } = useAppContext()
   const [serverTasks, setServerTasks] = useState([])
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState(null)
   const [filter, setFilter]           = useState("all")
   const [selectedId, setSelectedId]   = useState(null)
+  const [launching, setLaunching]     = useState(false)
+  const [editedTemplates, setEditedTemplates] = useState({})
+  const [editingTemplate, setEditingTemplate] = useState(false)
+
+  useEffect(() => { setEditingTemplate(false) }, [selectedId])
 
   // タスク画面に切り替えたとき、または activePc 変更時にサーバからタスクを取得
   useEffect(() => {
@@ -75,8 +80,12 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
   const launch = async (program) => {
     const pc = pcs.find(p => p.id === activePc)
     if (!pc) return
+    const editedTemplate = editedTemplates[program.id]
+    const templateOverride = editedTemplate !== undefined && editedTemplate !== program.commandTemplate
+      ? editedTemplate
+      : undefined
     try {
-      await runTask(getServerUrl(pc), program.taskName, program.nodeName, program.variables)
+      await runTask(getServerUrl(pc), program.taskName, program.nodeName, program.variables, templateOverride)
       setRunningTasks(prev => ({
         ...prev,
         [activePc]: [...(prev[activePc] || []), {
@@ -91,6 +100,16 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
     } catch (err) {
       setError(`起動失敗: ${err.message}`)
     }
+  }
+
+  const launchAll = async () => {
+    const notRunning = filtered.filter(p => !isRunning(p.id))
+    if (notRunning.length === 0) return
+    setLaunching(true)
+    for (const p of notRunning) {
+      await launch(p).catch(() => {})
+    }
+    setLaunching(false)
   }
 
   const stop = async (runningItem) => {
@@ -151,6 +170,12 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
               <div className="pc-card-stats mono">
                 <span>実行中: {(runningTasks[pc.id] || []).length}</span>
               </div>
+              {rosConfigs[pc.id] && (
+                <div className="mono" style={{ fontSize: 9, color: "var(--ink-3)", paddingTop: 4, borderTop: "1px dashed var(--border)", display: "grid", gap: 1 }}>
+                  <span>{rosConfigs[pc.id].network_if}{rosConfigs[pc.id].ip ? ` (${rosConfigs[pc.id].ip})` : ""}</span>
+                  <span>{rosConfigs[pc.id].ros_master_uri}</span>
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -167,7 +192,16 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
       )}
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)", gap: 14 }} className="task-grid">
-        <Section title="起動可能プログラム">
+        <Section title="起動可能プログラム" tools={
+          <button
+            className="btn primary sm"
+            disabled={launching || filtered.length === 0 || filtered.every(p => isRunning(p.id))}
+            onClick={launchAll}
+          >
+            <I.rocket size={11} />
+            {launching ? "起動中..." : `一括起動 (${filtered.filter(p => !isRunning(p.id)).length}件)`}
+          </button>
+        }>
           {taskNames.length > 0 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>
               {taskNames.map(t => {
@@ -245,8 +279,45 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
                 <div style={{ fontSize: 13 }}>{selected.description || "—"}</div>
               </div>
               <div>
-                <div className="detail-label">コマンドテンプレート</div>
-                <div className="cmd-block mono">{selected.commandTemplate || "—"}</div>
+                <div className="detail-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  コマンドテンプレート
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
+                    {editedTemplates[selected.id] !== undefined && editedTemplates[selected.id] !== selected.commandTemplate && (
+                      <button
+                        className="btn sm"
+                        style={{ fontSize: 10, padding: "2px 8px" }}
+                        onClick={() => setEditedTemplates(prev => { const n = { ...prev }; delete n[selected.id]; return n })}
+                      >
+                        リセット
+                      </button>
+                    )}
+                    {editingTemplate ? (
+                      <button
+                        className="btn primary sm"
+                        style={{ fontSize: 10, padding: "2px 8px" }}
+                        onClick={() => setEditingTemplate(false)}
+                      >
+                        確定
+                      </button>
+                    ) : (
+                      <button
+                        className="btn sm"
+                        style={{ fontSize: 10, padding: "2px 8px" }}
+                        onClick={() => setEditingTemplate(true)}
+                      >
+                        編集
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <textarea
+                  className="cmd-block mono"
+                  style={{ width: "100%", resize: editingTemplate ? "vertical" : "none", minHeight: 60, boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "var(--ink)", cursor: editingTemplate ? "text" : "default" }}
+                  value={editedTemplates[selected.id] ?? selected.commandTemplate ?? ""}
+                  readOnly={!editingTemplate}
+                  onChange={e => setEditedTemplates(prev => ({ ...prev, [selected.id]: e.target.value }))}
+                  spellCheck={false}
+                />
               </div>
               {Object.keys(selected.variables).length > 0 && (
                 <div>

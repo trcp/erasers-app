@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useTweaks } from '../components/TweaksPanel'
 import { defaultPresets } from '../constants/defaultPresets'
+import { getServerUrl, fetchNetworkInterfaces, fetchExecutionConfig } from '../services/erasersApi'
 
 const AppContext = createContext(null)
 
@@ -87,6 +88,29 @@ export function AppProvider({ children }) {
   const pcsRef = useRef(pcs)
   useEffect(() => { pcsRef.current = pcs }, [pcs])
 
+  const [rosConfigs, setRosConfigs] = useState({})
+  const prevOnlineRef = useRef({})
+
+  const loadRosConfig = useCallback(async (pc) => {
+    try {
+      const base = getServerUrl(pc)
+      const [nifs, cfg] = await Promise.all([fetchNetworkInterfaces(base), fetchExecutionConfig(base)])
+      const selectedIf = nifs.interfaces.find(n => n.name === cfg.network_if)
+      setRosConfigs(prev => ({
+        ...prev,
+        [pc.id]: { network_if: cfg.network_if, ros_master_uri: cfg.ros_master_uri, ip: selectedIf?.ip ?? "" },
+      }))
+    } catch { /* 通信エラーは無視 */ }
+  }, [])
+
+  useEffect(() => {
+    pcs.forEach(pc => {
+      const wasOnline = prevOnlineRef.current[pc.id]
+      if (pc.online && !wasOnline) loadRosConfig(pc)
+      prevOnlineRef.current[pc.id] = pc.online
+    })
+  }, [pcs, loadRosConfig])
+
   // pcId と省略可能な host を受け取る。新規追加直後など pcsRef 未反映時は host を直渡しできる
   const checkPcStatus = useCallback(async (pcId, hostOverride) => {
     const host = hostOverride ?? pcsRef.current.find(p => p.id === pcId)?.host
@@ -111,6 +135,15 @@ export function AppProvider({ children }) {
   }, [checkPcStatus])
 
   useEffect(() => { localStorage.setItem('erasers.pcs', JSON.stringify(pcs)) }, [pcs])
+
+  // PCが存在するのに選択がない（または選択済みIDが削除済み）場合は先頭を自動選択
+  useEffect(() => {
+    if (pcs.length === 0) return
+    if (!activePc || !pcs.find(p => p.id === activePc)) {
+      setActivePc(pcs[0].id)
+    }
+  }, [pcs, activePc])
+
   useEffect(() => { localStorage.setItem('erasers.rosbridge', JSON.stringify(rosbridge)) }, [rosbridge])
   useEffect(() => { localStorage.setItem('erasers.robotPresets', JSON.stringify(robotPresets)) }, [robotPresets])
   useEffect(() => { localStorage.setItem('erasers.controls', JSON.stringify(allControls)) }, [allControls])
@@ -159,6 +192,7 @@ export function AppProvider({ children }) {
     activePc, setActivePc,
     rosbridge, setRosbridge,
     checkPcStatus,
+    rosConfigs, loadRosConfig,
     runningTasks, setRunningTasks,
     topics, setTopics,
     robotPresets, setRobotPresets,

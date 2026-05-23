@@ -153,8 +153,10 @@ function RosSync() {
 
   const speechTopic   = activePreset?.speech?.topic   ?? '/robot/speech'
   const speechMsgType = activePreset?.speech?.msgType ?? 'std_msgs/String'
+  const batteryTopic   = activePreset?.battery?.topic   ?? '/battery_state'
+  const batteryMsgType = activePreset?.battery?.msgType ?? 'sensor_msgs/BatteryState'
 
-  const { message: battMsg }   = useRosTopic('/battery_state', 'sensor_msgs/BatteryState')
+  const { message: battMsg }   = useRosTopic(batteryTopic, batteryMsgType)
   const { message: odomMsg }   = useRosTopic('/odom', 'nav_msgs/Odometry', 'subscribe', 100)
   const { message: tempMsg }   = useRosTopic('/temperature', 'sensor_msgs/Temperature')
   const { message: cpuMsg }    = useRosTopic('/cpu_usage', 'std_msgs/Float64')
@@ -163,7 +165,14 @@ function RosSync() {
 
   useEffect(() => {
     if (battMsg == null) return
-    setTelemetry(prev => ({ ...prev, battery: battMsg.percentage * 100 }))
+    // sensor_msgs/BatteryState: percentage は 0-1
+    // std_msgs/Float32, Float64 など: data は 0-100 想定
+    const pct = battMsg.percentage != null
+      ? battMsg.percentage * 100
+      : battMsg.data != null
+      ? battMsg.data
+      : null
+    if (pct != null) setTelemetry(prev => ({ ...prev, battery: pct }))
   }, [battMsg])
 
   useEffect(() => {

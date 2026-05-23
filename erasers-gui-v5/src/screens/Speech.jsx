@@ -31,7 +31,7 @@ export function Speech({ utterances, pcName, onReplay }) {
             <div className="utt-status">
               <span className="utt-led" /> 最新の発話
             </div>
-            <div className="utt-source">{pcName} · {speechTopic} · 受信モニター</div>
+            <div className="utt-source">{speechTopic} · 受信モニター</div>
           </div>
           <div className="utt-time mono">
             {latest ? latest.time.toLocaleTimeString("ja-JP", { hour12: false }) : "--:--:--"}

@@ -3,8 +3,9 @@
 export const defaultPresets = {
   AMR: {
     label: "移動ロボット (AMR)",
-    speech: { topic: "/robot/speech", msgType: "std_msgs/String" },
-    cmdVel: { topic: "/cmd_vel", msgType: "geometry_msgs/Twist" },
+    speech:  { topic: "/robot/speech",  msgType: "std_msgs/String" },
+    battery: { topic: "/battery_state", msgType: "sensor_msgs/BatteryState" },
+    cmdVel:  { topic: "/cmd_vel",        msgType: "geometry_msgs/Twist" },
     modeGroups: [
       { group: "自律動作", modes: [
         { id: "auto",    label: "自律走行",   sub: "タスクを自動で実行",        icon: "rocket",   tone: "primary", action: null },
@@ -23,8 +24,9 @@ export const defaultPresets = {
   },
   ARM: {
     label: "ロボットアーム",
-    speech: { topic: "/robot/speech", msgType: "std_msgs/String" },
-    cmdVel: { topic: "/cmd_vel", msgType: "geometry_msgs/Twist" },
+    speech:  { topic: "/robot/speech",  msgType: "std_msgs/String" },
+    battery: { topic: "/battery_state", msgType: "sensor_msgs/BatteryState" },
+    cmdVel:  { topic: "/cmd_vel",        msgType: "geometry_msgs/Twist" },
     modeGroups: [
       { group: "自動動作", modes: [
         { id: "auto",      label: "自動プログラム", sub: "プログラムに従って実行",    icon: "play",     tone: "primary", action: null },
@@ -43,8 +45,9 @@ export const defaultPresets = {
   },
   DRONE: {
     label: "ドローン",
-    speech: { topic: "/robot/speech", msgType: "std_msgs/String" },
-    cmdVel: { topic: "/cmd_vel", msgType: "geometry_msgs/Twist" },
+    speech:  { topic: "/robot/speech",  msgType: "std_msgs/String" },
+    battery: { topic: "/battery_state", msgType: "sensor_msgs/BatteryState" },
+    cmdVel:  { topic: "/cmd_vel",        msgType: "geometry_msgs/Twist" },
     modeGroups: [
       { group: "自律飛行", modes: [
         { id: "auto",  label: "自律飛行",   sub: "ウェイポイントを追従",        icon: "rocket",  tone: "primary", action: null },
@@ -63,8 +66,9 @@ export const defaultPresets = {
   },
   QUAD: {
     label: "四足歩行",
-    speech: { topic: "/robot/speech", msgType: "std_msgs/String" },
-    cmdVel: { topic: "/cmd_vel", msgType: "geometry_msgs/Twist" },
+    speech:  { topic: "/robot/speech",  msgType: "std_msgs/String" },
+    battery: { topic: "/battery_state", msgType: "sensor_msgs/BatteryState" },
+    cmdVel:  { topic: "/cmd_vel",        msgType: "geometry_msgs/Twist" },
     modeGroups: [
       { group: "歩容", modes: [
         { id: "walk",  label: "歩行",       sub: "通常歩行モード",   icon: "rocket",  tone: "primary", action: null },
@@ -82,8 +86,9 @@ export const defaultPresets = {
   },
   FLEET: {
     label: "フリート (複数台)",
-    speech: { topic: "/robot/speech", msgType: "std_msgs/String" },
-    cmdVel: { topic: "/cmd_vel", msgType: "geometry_msgs/Twist" },
+    speech:  { topic: "/robot/speech",  msgType: "std_msgs/String" },
+    battery: { topic: "/battery_state", msgType: "sensor_msgs/BatteryState" },
+    cmdVel:  { topic: "/cmd_vel",        msgType: "geometry_msgs/Twist" },
     modeGroups: [
       { group: "協調動作", modes: [
         { id: "auto",      label: "自律協調", sub: "フリート全体でタスク分配", icon: "rocket",   tone: "primary", action: null },

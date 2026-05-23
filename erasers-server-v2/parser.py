@@ -79,7 +79,9 @@ class NodeData:
         if "start_time" in body:
             self.command.variables["start_time"]["default"] = body["start_time"]
 
-        cmd, my_env = self.build_cmd(self.command.template, ros_master_uri, body)
+        template = body.get("__command_template__", self.command.template)
+        clean_body = {k: v for k, v in body.items() if k != "__command_template__"}
+        cmd, my_env = self.build_cmd(template, ros_master_uri, clean_body)
 
         if self.proc is not None:
             if self.proc.poll() is None:

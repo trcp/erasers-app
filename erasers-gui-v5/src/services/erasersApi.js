@@ -26,11 +26,14 @@ export async function fetchTasks(baseUrl) {
   return flattenTasks(data)
 }
 
-export async function runTask(baseUrl, taskName, nodeName, variables = {}) {
+export async function runTask(baseUrl, taskName, nodeName, variables = {}, commandTemplate) {
+  const body = commandTemplate !== undefined
+    ? { ...variables, __command_template__: commandTemplate }
+    : variables
   const res = await fetch(`${baseUrl}/run_task/${taskName}/${nodeName}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(variables),
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
@@ -46,6 +49,28 @@ export async function killTask(baseUrl, taskName, nodeName) {
 
 export async function getTaskStatus(baseUrl, taskName, nodeName) {
   const res = await fetch(`${baseUrl}/task_running/${taskName}/${nodeName}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchNetworkInterfaces(baseUrl) {
+  const res = await fetch(`${baseUrl}/get_network_interfaces`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function fetchExecutionConfig(baseUrl) {
+  const res = await fetch(`${baseUrl}/get_execution_config`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function saveExecutionConfig(baseUrl, config) {
+  const res = await fetch(`${baseUrl}/set_execution_config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(config),
+  })
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
 }
