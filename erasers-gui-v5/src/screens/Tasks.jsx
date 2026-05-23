@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import I from '../icons.jsx'
+import { useAppContext } from '../context/AppContext'
 import { getServerUrl, fetchTasks, runTask, killTask, getTaskStatus } from '../services/erasersApi.js'
 
 function Section({ title, sub, tools, children, style }) {
@@ -16,14 +17,16 @@ function Section({ title, sub, tools, children, style }) {
 }
 
 export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActivePc }) {
+  const { screen } = useAppContext()
   const [serverTasks, setServerTasks] = useState([])
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState(null)
   const [filter, setFilter]           = useState("all")
   const [selectedId, setSelectedId]   = useState(null)
 
-  // activePc 変更時にサーバからタスクを取得
+  // タスク画面に切り替えたとき、または activePc 変更時にサーバからタスクを取得
   useEffect(() => {
+    if (screen !== 'tasks') return
     if (!activePc) return
     const pc = pcs.find(p => p.id === activePc)
     if (!pc) return
@@ -38,7 +41,7 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
-  }, [activePc])
+  }, [screen, activePc])
 
   // 実行中タスクのステータスをポーリング（2秒間隔）
   useEffect(() => {

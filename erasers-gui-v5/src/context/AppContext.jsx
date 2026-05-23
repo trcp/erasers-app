@@ -43,7 +43,9 @@ export function AppProvider({ children }) {
     try { return JSON.parse(localStorage.getItem('erasers.pcs')) || [] } catch { return [] }
   })
   const [activePc, setActivePc] = useState(() => localStorage.getItem('erasers.activePc') || null)
-  const [rosbridge, setRosbridge] = useState({ host: "192.168.1.10", port: "9090", ssl: false })
+  const [rosbridge, setRosbridge] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('erasers.rosbridge')) || { host: "192.168.1.10", port: "9090", ssl: false } } catch { return { host: "192.168.1.10", port: "9090", ssl: false } }
+  })
 
   const pcsRef = useRef(pcs)
   useEffect(() => { pcsRef.current = pcs }, [pcs])
@@ -72,6 +74,7 @@ export function AppProvider({ children }) {
   }, [checkPcStatus])
 
   useEffect(() => { localStorage.setItem('erasers.pcs', JSON.stringify(pcs)) }, [pcs])
+  useEffect(() => { localStorage.setItem('erasers.rosbridge', JSON.stringify(rosbridge)) }, [rosbridge])
   useEffect(() => {
     if (activePc) localStorage.setItem('erasers.activePc', activePc)
   }, [activePc])
