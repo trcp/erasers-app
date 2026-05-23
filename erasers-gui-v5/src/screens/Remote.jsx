@@ -418,7 +418,7 @@ function AddTopicModal({ onAdd, onCancel }) {
   )
 }
 
-function TopicsTab({ topics, setTopics, connected }) {
+function TopicsTab({ topics, setTopics }) {
   const [showAdd, setShowAdd] = useState(false)
   const [selectedId, setSelectedId] = useState(topics[0]?.id)
   const selected = topics.find(t => t.id === selectedId) || topics[0]
@@ -488,10 +488,8 @@ function TopicsTab({ topics, setTopics, connected }) {
   )
 }
 
-export function Remote({ telemetry, controls, setControls, topics, setTopics, rosbridgeUrl, pcName, connected, robotType, mode, setMode }) {
+export function Remote({ telemetry, controls, setControls, topics, setTopics, rosbridgeUrl, pcName, robotType, mode, setMode }) {
   const [tab, setTab] = useState("teleop")
-  const { status } = useRos()
-  const isConnected = status === 'connected' || connected
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -501,9 +499,6 @@ export function Remote({ telemetry, controls, setControls, topics, setTopics, ro
           <div className="page-sub">TELEOP · {pcName} · {rosbridgeUrl}</div>
         </div>
         <div className="page-tools">
-          <span className={`chip ${isConnected ? "ok" : "danger"}`}>
-            <span className="dot" /> {isConnected ? "rosbridge 接続中" : "未接続"}
-          </span>
           <button className="btn danger" onClick={() => {
             const { publish } = { publish: () => {} }
             alert("緊急停止が送信されました")
@@ -528,7 +523,7 @@ export function Remote({ telemetry, controls, setControls, topics, setTopics, ro
       {tab === "teleop" ? (
         <TeleopTab telemetry={telemetry} controls={controls} setControls={setControls} />
       ) : tab === "topics" ? (
-        <TopicsTab topics={topics} setTopics={setTopics} connected={isConnected} />
+        <TopicsTab topics={topics} setTopics={setTopics} />
       ) : (
         <ModeTab robotType={robotType} mode={mode} setMode={setMode} />
       )}

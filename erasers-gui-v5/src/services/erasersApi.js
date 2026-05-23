@@ -1,0 +1,51 @@
+const SERVER_PORT = 3001
+
+export function getServerUrl(pc) {
+  return `http://${pc.host}:${SERVER_PORT}`
+}
+
+export function flattenTasks(data) {
+  return Object.entries(data).flatMap(([taskName, entry]) =>
+    Object.entries(entry.programs).map(([nodeName, node]) => ({
+      id: `${taskName}/${nodeName}`,
+      taskName,
+      nodeName,
+      displayName: node.display_name,
+      taskDisplayName: entry.task.display_name,
+      description: node.description,
+      commandTemplate: node.command.template,
+      variables: node.command.variables || {},
+    }))
+  )
+}
+
+export async function fetchTasks(baseUrl) {
+  const res = await fetch(`${baseUrl}/get_task`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return flattenTasks(data)
+}
+
+export async function runTask(baseUrl, taskName, nodeName, variables = {}) {
+  const res = await fetch(`${baseUrl}/run_task/${taskName}/${nodeName}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(variables),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function killTask(baseUrl, taskName, nodeName) {
+  const res = await fetch(`${baseUrl}/kill_task/${taskName}/${nodeName}`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
+export async function getTaskStatus(baseUrl, taskName, nodeName) {
+  const res = await fetch(`${baseUrl}/task_running/${taskName}/${nodeName}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}

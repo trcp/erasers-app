@@ -2,6 +2,7 @@ import { useState } from 'react'
 import I from '../icons.jsx'
 import { MODES_BY_ROBOT, ROBOT_TYPE_LABELS } from '../constants/robotModes.js'
 import { useRos } from '../context/RosContext'
+import { useAppContext } from '../context/AppContext'
 
 function Section({ title, sub, tools, children, style }) {
   return (
@@ -32,15 +33,11 @@ function SettingsSlider({ label, value, min, max, step, unit, onChange }) {
 export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, setPcs, activePc, setActivePc, robotType, setRobotType }) {
   const [host, setHost] = useState(rosbridge.host)
   const [port, setPort] = useState(rosbridge.port)
-  const [ssl, setSsl]   = useState(rosbridge.ssl)
-  const { status, connect } = useRos()
+  const { status } = useRos()
+  const { checkPcStatus } = useAppContext()
 
-  const save = () => {
-    const newConfig = { host, port, ssl }
-    setRosbridge(newConfig)
-    connect(newConfig)
-  }
-  const url = `${ssl ? "wss" : "ws"}://${host}:${port}`
+  const save = () => setRosbridge({ host, port, ssl: false })
+  const url = `ws://${host}:${port}`
 
   const statusLabel = {
     connected:    { text: "接続中", cls: "ok" },
@@ -53,18 +50,19 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
   const addPc = () => {
     if (!newPc.name || !newPc.host) return
     const id = "pc-" + Date.now()
+    const host = newPc.host
     setPcs(prev => {
-      const next = [...prev, { ...newPc, id, online: true }]
+      const next = [...prev, { ...newPc, id, online: false }]
       if (!activePc) setActivePc(id)
       return next
     })
     setNewPc({ name: "", host: "" })
+    checkPcStatus(id, host)
   }
   const removePc = (id) => {
     setPcs(prev => prev.filter(p => p.id !== id))
     if (activePc === id) setActivePc(pcs.find(p => p.id !== id)?.id ?? null)
   }
-  const togglePc = (id) => setPcs(prev => prev.map(p => p.id === id ? { ...p, online: !p.online } : p))
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -72,9 +70,6 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         <div>
           <h2 className="page-title">設定</h2>
           <div className="page-sub">GLOBAL_CONFIG</div>
-        </div>
-        <div className="page-tools">
-          <button className="btn primary" onClick={save}><I.check size={14} /> 保存 & 接続</button>
         </div>
       </div>
 
@@ -98,8 +93,8 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         </div>
       </Section>
 
-      <Section title="rosbridge 接続" sub="WEBSOCKET ENDPOINT">
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr auto", gap: 10, alignItems: "end" }} className="rosbridge-form">
+      <Section title="rosbridge 接続" sub="WEBSOCKET ENDPOINT" tools={<button className="btn primary sm" onClick={save}><I.check size={12} /> 設定</button>}>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, alignItems: "end" }} className="rosbridge-form">
           <label style={{ display: "grid", gap: 4 }}>
             <span className="form-label">ホスト / IPアドレス</span>
             <input className="input mono" value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.10" />
@@ -108,20 +103,14 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
             <span className="form-label">ポート</span>
             <input className="input mono" value={port} onChange={e => setPort(e.target.value)} placeholder="9090" />
           </label>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, paddingBottom: 8, fontSize: 12, whiteSpace: "nowrap" }}>
-            <input type="checkbox" checked={ssl} onChange={e => setSsl(e.target.checked)} /> SSL (wss)
-          </label>
         </div>
         <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--surface-2)", borderRadius: 6, border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
           <span className="mono" style={{ fontSize: 12, color: "var(--ink-2)" }}>
             URL: <span style={{ color: "var(--ink)" }}>{url}</span>
           </span>
-          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-            <span className={`chip ${statusLabel.cls}`}>
-              <span className="dot" /> {statusLabel.text}
-            </span>
-            <button className="btn primary sm" onClick={save}>接続</button>
-          </div>
+          <span className={`chip ${statusLabel.cls}`}>
+            <span className="dot" /> {statusLabel.text}
+          </span>
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: "var(--ink-3)", fontFamily: "var(--mono)" }}>
           ※ サーバ側で <code>ros2 launch rosbridge_server rosbridge_websocket_launch.xml</code> を起動してください
@@ -142,9 +131,6 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
               ) : (
                 <button className="btn sm" onClick={() => setActivePc(pc.id)}>選択</button>
               )}
-              <button className="btn sm" onClick={() => togglePc(pc.id)}>
-                {pc.online ? "オフライン" : "オンライン"}
-              </button>
               <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => removePc(pc.id)}><I.trash size={12} /></button>
             </div>
           ))}

@@ -7,7 +7,6 @@ import { Speech, UtteranceOverlay } from './screens/Speech'
 import { Remote } from './screens/Remote'
 import { MapScreen } from './screens/MapScreen'
 import { Tasks } from './screens/Tasks'
-import { Logs } from './screens/Logs'
 import { Settings } from './screens/Settings'
 import { ROBOT_TYPES, ACCENTS, applyTokens } from './constants/theme'
 import I from './icons.jsx'
@@ -17,13 +16,12 @@ const NAV = [
   { id: "remote",   label: "遠隔操作",     icon: I.joystick, group: "main" },
   { id: "map",      label: "マップ",       icon: I.map,      group: "main" },
   { id: "tasks",    label: "タスク",       icon: I.tasks,    group: "main" },
-  { id: "logs",     label: "ログ",         icon: I.logs,     group: "system" },
   { id: "settings", label: "設定",         icon: I.settings, group: "system" },
 ]
 
 function TopBar({ onMenu }) {
   const { tweaks, telemetry, rosbridge } = useAppContext()
-  const { status } = useRos()
+  const { status, connect } = useRos()
   const r = ROBOT_TYPES[tweaks.robotType] || ROBOT_TYPES["AMR"]
   const [time, setTime] = useState(new Date())
   useEffect(() => {
@@ -54,14 +52,16 @@ function TopBar({ onMenu }) {
         <span><span className="v">{time.toLocaleTimeString("ja-JP", { hour12: false })}</span></span>
       </div>
 
-      <div
+      <button
         className={`bridge-pill ${bridgeCls}`}
         title={`${rosbridge.ssl ? "wss" : "ws"}://${rosbridge.host}:${rosbridge.port} · ${status}`}
+        onClick={() => connect(rosbridge)}
+        style={{ cursor: 'pointer' }}
       >
         <span className="bridge-led" />
         <span className="bridge-text">rosbridge</span>
         <span className="bridge-host mono">{rosbridge.host}</span>
-      </div>
+      </button>
     </header>
   )
 }
@@ -112,7 +112,6 @@ function Drawer({ open, onClose }) {
         </div>
         <div className="drawer-foot">
           <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-3)", display: "grid", gap: 4 }}>
-            <div>ROS2 / Humble · DDS</div>
             <div>ESC でメニューを閉じる</div>
           </div>
         </div>
@@ -218,15 +217,13 @@ function AppShell() {
 
   useEffect(() => { applyTokens(tweaks) }, [tweaks.accent, tweaks.density])
 
-  const connected = pcs.find(p => p.id === activePc)?.online ?? false
   const activePcName = pcs.find(p => p.id === activePc)?.name || "—"
 
   let body
   if (screen === "speech")        body = <Speech utterances={utterances} pcName={activePcName} onReplay={setOverlayUtterance} />
-  else if (screen === "remote")   body = <Remote telemetry={telemetry} controls={controls} setControls={setControls} topics={topics} setTopics={setTopics} rosbridgeUrl={`${rosbridge.ssl ? "wss" : "ws"}://${rosbridge.host}:${rosbridge.port}`} pcName={activePcName} connected={connected} robotType={tweaks.robotType} mode={mode} setMode={setMode} />
+  else if (screen === "remote")   body = <Remote telemetry={telemetry} controls={controls} setControls={setControls} topics={topics} setTopics={setTopics} rosbridgeUrl={`${rosbridge.ssl ? "wss" : "ws"}://${rosbridge.host}:${rosbridge.port}`} pcName={activePcName} robotType={tweaks.robotType} mode={mode} setMode={setMode} />
   else if (screen === "map")      body = <MapScreen telemetry={telemetry} waypoints={waypoints} setWaypoints={setWaypoints} />
   else if (screen === "tasks")    body = <Tasks runningTasks={runningTasks} setRunningTasks={setRunningTasks} pcs={pcs} activePc={activePc} setActivePc={setActivePc} />
-  else if (screen === "logs")     body = <Logs />
   else if (screen === "settings") body = <Settings controls={controls} setControls={setControls} rosbridge={rosbridge} setRosbridge={setRosbridge} pcs={pcs} setPcs={setPcs} activePc={activePc} setActivePc={setActivePc} robotType={tweaks.robotType} setRobotType={v => setTweak("robotType", v)} />
 
   return (

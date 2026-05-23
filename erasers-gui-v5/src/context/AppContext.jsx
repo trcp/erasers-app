@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useTweaks } from '../components/TweaksPanel'
 
 const AppContext = createContext(null)
@@ -45,6 +45,32 @@ export function AppProvider({ children }) {
   const [activePc, setActivePc] = useState(() => localStorage.getItem('erasers.activePc') || null)
   const [rosbridge, setRosbridge] = useState({ host: "192.168.1.10", port: "9090", ssl: false })
 
+  const pcsRef = useRef(pcs)
+  useEffect(() => { pcsRef.current = pcs }, [pcs])
+
+  // pcId と省略可能な host を受け取る。新規追加直後など pcsRef 未反映時は host を直渡しできる
+  const checkPcStatus = useCallback(async (pcId, hostOverride) => {
+    const host = hostOverride ?? pcsRef.current.find(p => p.id === pcId)?.host
+    if (!host) return
+    const controller = new AbortController()
+    const timerId = setTimeout(() => controller.abort(), 3000)
+    let online = false
+    try {
+      const res = await fetch(`http://${host}:3001/get_execution_config`, { signal: controller.signal })
+      online = res.ok
+    } catch { /* 到達不可 = offline */ }
+    clearTimeout(timerId)
+    setPcs(prev => prev.map(p => p.id === pcId ? { ...p, online } : p))
+  }, [])
+
+  // 10秒ごとに全PCの接続状態を自動確認
+  useEffect(() => {
+    const checkAll = () => pcsRef.current.forEach(pc => checkPcStatus(pc.id))
+    checkAll()
+    const timerId = setInterval(checkAll, 10000)
+    return () => clearInterval(timerId)
+  }, [checkPcStatus])
+
   useEffect(() => { localStorage.setItem('erasers.pcs', JSON.stringify(pcs)) }, [pcs])
   useEffect(() => {
     if (activePc) localStorage.setItem('erasers.activePc', activePc)
@@ -72,6 +98,7 @@ export function AppProvider({ children }) {
     pcs, setPcs,
     activePc, setActivePc,
     rosbridge, setRosbridge,
+    checkPcStatus,
     runningTasks, setRunningTasks,
     topics, setTopics,
   }
