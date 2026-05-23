@@ -1,9 +1,11 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import ROSLIB from 'roslib'
 import I from '../icons.jsx'
-import { MODES_BY_ROBOT, ROBOT_TYPE_LABELS } from '../constants/robotModes.js'
+import { MODES_BY_ROBOT } from '../constants/robotModes.js'
 import { useRosTopic } from '../hooks/useRosTopic'
 import { useRosService } from '../hooks/useRosService'
 import { useRos } from '../context/RosContext'
+import { useAppContext } from '../context/AppContext'
 
 function Section({ title, sub, tools, children, style }) {
   return (
@@ -100,9 +102,12 @@ function SliderRow({ label, value, min, max, step, unit, onChange }) {
 }
 
 function TeleopTab({ telemetry, controls, setControls }) {
+  const { activePreset } = useAppContext()
+  const cmdVelTopic   = activePreset?.cmdVel?.topic   ?? '/cmd_vel'
+  const cmdVelMsgType = activePreset?.cmdVel?.msgType ?? 'geometry_msgs/Twist'
   const [lin, setLin] = useState({ x: 0, y: 0 })
   const [rot, setRot] = useState({ x: 0, y: 0 })
-  const { publish } = useRosTopic('/cmd_vel', 'geometry_msgs/Twist', 'publish')
+  const { publish } = useRosTopic(cmdVelTopic, cmdVelMsgType, 'publish')
 
   const handleLin = (newLin) => {
     setLin(newLin)
@@ -142,7 +147,7 @@ function TeleopTab({ telemetry, controls, setControls }) {
           <span>VX: <span style={{ color: "var(--ink)" }}>{(lin.y * controls.maxSpeed).toFixed(2)} m/s</span></span>
           <span>VY: <span style={{ color: "var(--ink)" }}>{(lin.x * controls.maxSpeed).toFixed(2)} m/s</span></span>
           <span>ω: <span style={{ color: "var(--ink)" }}>{(rot.x * controls.maxRot).toFixed(0)} °/s</span></span>
-          <span style={{ color: "var(--ink-3)" }}>→ /cmd_vel</span>
+          <span style={{ color: "var(--ink-3)" }}>→ {cmdVelTopic}</span>
         </div>
       </Section>
     </>
@@ -169,7 +174,7 @@ function ModeConfirmModal({ mode, onConfirm, onCancel }) {
         </div>
         <div className="modal-foot">
           <button className="btn" onClick={onCancel}>キャンセル</button>
-          <button className={`btn primary ${mode.tone || ""}`} onClick={onConfirm}><I.check size={14} /> 切り替える</button>
+          <button className={`btn primary ${mode.tone || ""}`} onClick={onConfirm}><I.arrow size={14} /> 送信する</button>
         </div>
       </div>
     </div>
@@ -177,23 +182,42 @@ function ModeConfirmModal({ mode, onConfirm, onCancel }) {
 }
 
 function ModeTab({ robotType, mode, setMode }) {
+  const { activePreset } = useAppContext()
+  const { ros, status } = useRos()
   const [pending, setPending] = useState(null)
-  const groups = MODES_BY_ROBOT[robotType] || MODES_BY_ROBOT.AMR
+
+  const groups = activePreset?.modeGroups ?? MODES_BY_ROBOT[robotType] ?? MODES_BY_ROBOT.AMR
   const allModes = groups.flatMap(g => g.modes)
 
   const handleClick = (m) => {
-    if (m.id === mode) return
     setPending(m)
   }
 
   const confirm = () => {
     setMode(pending.id)
+    const action = pending.action
+    if (action && status === 'connected' && ros.current) {
+      try {
+        if (action.type === 'service') {
+          const svc = new ROSLIB.Service({ ros: ros.current, name: action.name, serviceType: action.serviceType })
+          svc.callService(new ROSLIB.ServiceRequest(action.request || {}), () => {}, () => {})
+        } else if (action.type === 'publish') {
+          const topic = new ROSLIB.Topic({ ros: ros.current, name: action.topic, messageType: action.msgType })
+          topic.publish(new ROSLIB.Message(action.msg || {}))
+          topic.unadvertise()
+        } else if (action.type === 'actionlib') {
+          const ac = new ROSLIB.ActionClient({ ros: ros.current, serverName: action.server, actionName: action.actionType })
+          const goal = new ROSLIB.Goal({ actionClient: ac, goalMessage: new ROSLIB.Message(action.goal || {}) })
+          goal.send()
+        }
+      } catch (_) { /* ROS 未接続時などは無視 */ }
+    }
     setPending(null)
   }
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
-      <Section title="モード選択" sub={`${ROBOT_TYPE_LABELS[robotType] || robotType} · ${allModes.length} MODES`}>
+      <Section title="モード送信" sub={`${activePreset?.label ?? robotType} · ${allModes.length} MODES · アクション ${allModes.filter(m => m.action).length} 件`}>
         <div className="mode-groups">
           {groups.map(g => (
             <div key={g.group} className="mode-group">
@@ -212,7 +236,7 @@ function ModeTab({ robotType, mode, setMode }) {
                       <div className="mode-card-icon"><Icon size={20} /></div>
                       <div className="mode-card-label">{m.label}</div>
                       <div className="mode-card-sub">{m.sub}</div>
-                      {isActive ? <span className="mode-card-check"><I.check size={12} /></span> : null}
+                      {isActive ? <span className="mode-card-check" style={{ fontSize: 9, letterSpacing: '.04em' }}>SENT</span> : null}
                     </button>
                   )
                 })}
@@ -234,17 +258,83 @@ const COMMON_TYPES = [
 ]
 
 function defaultPayload(type) {
+  const STAMP = { secs: 0, nsecs: 0 }
+  const HEADER = { seq: 0, stamp: STAMP, frame_id: "" }
+  const VEC3   = { x: 0, y: 0, z: 0 }
+  const QUAT   = { x: 0, y: 0, z: 0, w: 1 }
+  const POSE   = { position: VEC3, orientation: QUAT }
   switch (type) {
-    case "std_msgs/String":  return JSON.stringify({ data: "hello" }, null, 2)
-    case "std_msgs/Int32":   return JSON.stringify({ data: 0 }, null, 2)
-    case "std_msgs/Float64": return JSON.stringify({ data: 0.0 }, null, 2)
-    case "std_msgs/Bool":    return JSON.stringify({ data: true }, null, 2)
-    case "geometry_msgs/Twist":
-      return JSON.stringify({ linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } }, null, 2)
-    case "geometry_msgs/Pose":
-      return JSON.stringify({ position: { x: 0, y: 0, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } }, null, 2)
+    // std_msgs
+    case "std_msgs/String":                    return JSON.stringify({ data: "" }, null, 2)
+    case "std_msgs/Bool":                      return JSON.stringify({ data: false }, null, 2)
+    case "std_msgs/Int8":   case "std_msgs/Int16":
+    case "std_msgs/Int32":  case "std_msgs/Int64":
+    case "std_msgs/UInt8":  case "std_msgs/UInt16":
+    case "std_msgs/UInt32": case "std_msgs/UInt64": return JSON.stringify({ data: 0 }, null, 2)
+    case "std_msgs/Float32": case "std_msgs/Float64": return JSON.stringify({ data: 0.0 }, null, 2)
+    case "std_msgs/Empty":                     return JSON.stringify({}, null, 2)
+    case "std_msgs/Header":                    return JSON.stringify(HEADER, null, 2)
+    // std_srvs
+    case "std_srvs/SetBool":                   return JSON.stringify({ data: true }, null, 2)
+    case "std_srvs/Empty": case "std_srvs/Trigger": return JSON.stringify({}, null, 2)
+    // geometry_msgs
+    case "geometry_msgs/Vector3":              return JSON.stringify(VEC3, null, 2)
+    case "geometry_msgs/Point":                return JSON.stringify(VEC3, null, 2)
+    case "geometry_msgs/Quaternion":           return JSON.stringify(QUAT, null, 2)
+    case "geometry_msgs/Pose":                 return JSON.stringify(POSE, null, 2)
+    case "geometry_msgs/PoseStamped":          return JSON.stringify({ header: { ...HEADER, frame_id: "map" }, pose: POSE }, null, 2)
+    case "geometry_msgs/Twist":                return JSON.stringify({ linear: VEC3, angular: VEC3 }, null, 2)
+    case "geometry_msgs/TwistStamped":         return JSON.stringify({ header: HEADER, twist: { linear: VEC3, angular: VEC3 } }, null, 2)
+    case "geometry_msgs/Transform":            return JSON.stringify({ translation: VEC3, rotation: QUAT }, null, 2)
+    case "geometry_msgs/TransformStamped":     return JSON.stringify({ header: HEADER, child_frame_id: "", transform: { translation: VEC3, rotation: QUAT } }, null, 2)
+    case "geometry_msgs/Accel":                return JSON.stringify({ linear: VEC3, angular: VEC3 }, null, 2)
+    case "geometry_msgs/Wrench":               return JSON.stringify({ force: VEC3, torque: VEC3 }, null, 2)
+    // nav_msgs
+    case "nav_msgs/Odometry":
+      return JSON.stringify({ header: { ...HEADER, frame_id: "odom" }, child_frame_id: "base_link",
+        pose: { pose: POSE, covariance: Array(36).fill(0) },
+        twist: { twist: { linear: VEC3, angular: VEC3 }, covariance: Array(36).fill(0) } }, null, 2)
+    case "nav_msgs/Path":
+      return JSON.stringify({ header: { ...HEADER, frame_id: "map" }, poses: [] }, null, 2)
+    // sensor_msgs
+    case "sensor_msgs/Joy":
+      return JSON.stringify({ header: HEADER, axes: [0.0, 0.0, 0.0], buttons: [0, 0, 0] }, null, 2)
+    case "sensor_msgs/JointState":
+      return JSON.stringify({ header: HEADER, name: [], position: [], velocity: [], effort: [] }, null, 2)
+    // actionlib_msgs
+    case "actionlib_msgs/GoalID":
+      return JSON.stringify({ stamp: STAMP, id: "" }, null, 2)
     default: return "{}"
   }
+}
+
+const ROS_PRIMITIVES = {
+  bool: false,
+  int8: 0, int16: 0, int32: 0, int64: 0,
+  uint8: 0, uint16: 0, uint32: 0, uint64: 0,
+  float32: 0.0, float64: 0.0,
+  string: "",
+  time: { secs: 0, nsecs: 0 },
+  duration: { secs: 0, nsecs: 0 },
+  byte: 0, char: 0,
+}
+
+function buildTemplate(rootType, typedefs) {
+  const typeMap = Object.fromEntries(typedefs.map(t => [t.type, t]))
+  const build = (type, depth = 0) => {
+    if (depth > 8) return null
+    if (type in ROS_PRIMITIVES) return ROS_PRIMITIVES[type]
+    const def = typeMap[type]
+    if (!def) return null
+    const obj = {}
+    def.fieldnames.forEach((name, i) => {
+      const fieldType = def.fieldtypes[i]
+      const arrayLen  = def.fieldarraylen?.[i] ?? -1
+      obj[name] = arrayLen >= 0 ? [] : build(fieldType, depth + 1)
+    })
+    return obj
+  }
+  return JSON.stringify(build(rootType), null, 2)
 }
 
 function SubscribeView({ topic }) {
@@ -281,8 +371,27 @@ function SubscribeView({ topic }) {
 function PublishView({ topic }) {
   const [payload, setPayload] = useState(defaultPayload(topic.type))
   const [history, setHistory] = useState([])
+  const [fetching, setFetching] = useState(false)
   const { publish } = useRosTopic(topic.name, topic.type, 'publish')
   const { status } = useRos()
+  const { call: fetchMsgDetails } = useRosService('/rosapi/message_details', 'rosapi/MessageDetails')
+
+  const fetchTemplate = useCallback(() => {
+    setFetching(true)
+    fetchMsgDetails({ type: topic.type })
+      .then(res => {
+        if (res?.typedefs?.length > 0) setPayload(buildTemplate(topic.type, res.typedefs))
+      })
+      .catch(() => {})
+      .finally(() => setFetching(false))
+  }, [topic.type, fetchMsgDetails])
+
+  // 未知の型のとき接続されたら自動取得
+  useEffect(() => {
+    if (defaultPayload(topic.type) !== '{}') return
+    if (status !== 'connected') return
+    fetchTemplate()
+  }, [status, topic.type])
 
   const send = () => {
     const entry = { time: new Date(), data: payload }
@@ -309,9 +418,13 @@ function PublishView({ topic }) {
           spellCheck={false}
           style={{ fontFamily: "var(--mono)", fontSize: 12, resize: "vertical" }}
         />
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="btn primary" onClick={send}><I.arrow size={14} /> 送信</button>
           <button className="btn" onClick={() => setPayload(defaultPayload(topic.type))}>リセット</button>
+          <button className="btn" onClick={fetchTemplate} disabled={fetching || status !== 'connected'}
+            title={status !== 'connected' ? "rosbridge に接続してください" : "ROS からメッセージ構造を取得"}>
+            <I.download size={12} /> {fetching ? "取得中..." : "テンプレート取得"}
+          </button>
         </div>
       </div>
       {history.length > 0 && (

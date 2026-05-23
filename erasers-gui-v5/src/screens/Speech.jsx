@@ -1,6 +1,5 @@
 import { useEffect } from 'react'
 import I from '../icons.jsx'
-import { useRosTopic } from '../hooks/useRosTopic'
 import { useAppContext } from '../context/AppContext'
 
 function Section({ title, sub, tools, children, style }) {
@@ -17,18 +16,8 @@ function Section({ title, sub, tools, children, style }) {
 }
 
 export function Speech({ utterances, pcName, onReplay }) {
-  const { setUtterances, setOverlayUtterance, screen } = useAppContext()
-
-  // Real /robot/speech subscription
-  const { message: speechMsg } = useRosTopic('/robot/speech', 'std_msgs/String', 'subscribe')
-  useEffect(() => {
-    if (!speechMsg) return
-    const text = speechMsg.data
-    if (!text) return
-    const u = { id: Date.now() + Math.random(), text, time: new Date(), source: "ros" }
-    setUtterances(prev => [u, ...prev].slice(0, 50))
-    if (screen === "speech") setOverlayUtterance(u)
-  }, [speechMsg])
+  const { activePreset } = useAppContext()
+  const speechTopic = activePreset?.speech?.topic ?? '/robot/speech'
 
   const latest = utterances[0]
   return (
@@ -42,7 +31,7 @@ export function Speech({ utterances, pcName, onReplay }) {
             <div className="utt-status">
               <span className="utt-led" /> 最新の発話
             </div>
-            <div className="utt-source">{pcName} · TTS_ja_v2 · 受信モニター</div>
+            <div className="utt-source">{pcName} · {speechTopic} · 受信モニター</div>
           </div>
           <div className="utt-time mono">
             {latest ? latest.time.toLocaleTimeString("ja-JP", { hour12: false }) : "--:--:--"}

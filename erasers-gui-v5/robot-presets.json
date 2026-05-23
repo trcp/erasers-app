@@ -1,0 +1,142 @@
+{
+  "AMR222": {
+    "speech": {
+      "topic": "/talking_sentencecccc",
+      "msgType": "std_msgs/String"
+    },
+    "modeGroups": [
+      {
+        "group": "Robot Pose",
+        "modes": [
+          {
+            "id": "whole_body.neutrallllllllllllllllllll",
+            "label": "whole_body.neutral",
+            "sub": "whole_body.neutral",
+            "icon": "rocket",
+            "tone": null,
+            "action": {
+              "type": "actionlib",
+              "server": "/hsrb/arm_trajectory_controller/follow_joint_trajectory",
+              "actionType": "control_msgs/FollowJointTrajectoryAction",
+              "goal": {
+                "trajectory": {
+                  "header": {
+                    "seq": 0,
+                    "stamp": {
+                      "secs": 0,
+                      "nsecs": 0
+                    },
+                    "frame_id": ""
+                  },
+                  "joint_names": [
+                    "arm_lift",
+                    "arm_flex",
+                    "arm_roll",
+                    "wrist_flex",
+                    "wrist_roll"
+                  ],
+                  "points": [
+                    0,
+                    0,
+                    0,
+                    -1.57,
+                    0
+                  ]
+                },
+                "path_tolerance": [],
+                "goal_tolerance": [],
+                "goal_time_tolerance": {
+                  "secs": 1,
+                  "nsecs": 0
+                }
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "cmdVel": {
+      "topic": "/hsrb/command_velocity",
+      "msgType": "geometry_msgs/Twist"
+    }
+  },
+  "ARM": {
+    "speech": {
+      "topic": "/robot/speech",
+      "msgType": "std_msgs/String"
+    },
+    "modeGroups": [
+      {
+        "group": "自動動作",
+        "modes": [
+          {
+            "id": "auto",
+            "label": "自動プログラム",
+            "sub": "プログラムに従って実行",
+            "icon": "play",
+            "tone": "primary",
+            "action": null
+          },
+          {
+            "id": "loop",
+            "label": "ループ実行",
+            "sub": "同じ動作を繰り返し実行",
+            "icon": "refresh",
+            "tone": null,
+            "action": null
+          }
+        ]
+      },
+      {
+        "group": "ティーチング",
+        "modes": [
+          {
+            "id": "teach",
+            "label": "ティーチング",
+            "sub": "手で動かしてポーズを記録",
+            "icon": "pin",
+            "tone": null,
+            "action": null
+          },
+          {
+            "id": "freedrive",
+            "label": "フリードライブ",
+            "sub": "トルクを押された方向に追従",
+            "icon": "wave",
+            "tone": null,
+            "action": null
+          },
+          {
+            "id": "jog",
+            "label": "ジョグ送り",
+            "sub": "関節・デカルトごとに手動",
+            "icon": "joystick",
+            "tone": null,
+            "action": null
+          }
+        ]
+      },
+      {
+        "group": "状態・安全",
+        "modes": [
+          {
+            "id": "home",
+            "label": "ホーム姿勢",
+            "sub": "初期位置へ移動",
+            "icon": "pin",
+            "tone": null,
+            "action": null
+          },
+          {
+            "id": "halt",
+            "label": "停止",
+            "sub": "サーボをオフ",
+            "icon": "stop",
+            "tone": "danger",
+            "action": null
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useTweaks } from '../components/TweaksPanel'
+import { defaultPresets } from '../constants/defaultPresets'
 
 const AppContext = createContext(null)
 
@@ -8,6 +9,8 @@ const TWEAK_DEFAULTS = {
   density:   "comfortable",
   robotType: "AMR",
 }
+
+const DEFAULT_CONTROLS = { maxSpeed: 1.2, maxRot: 90, accel: 1.0 }
 
 export function AppProvider({ children }) {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS)
@@ -19,7 +22,21 @@ export function AppProvider({ children }) {
     pose: { x: 0, y: 0, t: 0 },
     path: [],
   })
-  const [controls, setControls] = useState({ maxSpeed: 1.2, maxRot: 90, accel: 1.0 })
+  const [allControls, setAllControls] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('erasers.controls'))
+      if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored
+    } catch { /* ignore */ }
+    return {}
+  })
+  const controls = allControls[tweaks.robotType] ?? DEFAULT_CONTROLS
+  const setControls = useCallback((updater) => {
+    setAllControls(prev => {
+      const current = prev[tweaks.robotType] ?? DEFAULT_CONTROLS
+      const next = typeof updater === 'function' ? updater(current) : updater
+      return { ...prev, [tweaks.robotType]: next }
+    })
+  }, [tweaks.robotType])
   const [mode, setMode]         = useState("auto")
   useEffect(() => { setMode("auto") }, [tweaks.robotType])
 
@@ -46,6 +63,26 @@ export function AppProvider({ children }) {
   const [rosbridge, setRosbridge] = useState(() => {
     try { return JSON.parse(localStorage.getItem('erasers.rosbridge')) || { host: "192.168.1.10", port: "9090", ssl: false } } catch { return { host: "192.168.1.10", port: "9090", ssl: false } }
   })
+
+  const [robotPresets, setRobotPresets] = useState(() => {
+    try {
+      const stored = localStorage.getItem('erasers.robotPresets')
+      if (stored) {
+        const parsed = JSON.parse(stored)
+        if (parsed && typeof parsed === 'object') return parsed
+      }
+    } catch { /* ignore */ }
+    return defaultPresets
+  })
+
+  // localStorage に保存済みのプリセットがない場合のみ public/robot-presets.json を取得する
+  useEffect(() => {
+    if (localStorage.getItem('erasers.robotPresets')) return
+    fetch('/robot-presets.json')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setRobotPresets(data) })
+      .catch(() => {})
+  }, [])
 
   const pcsRef = useRef(pcs)
   useEffect(() => { pcsRef.current = pcs }, [pcs])
@@ -75,18 +112,38 @@ export function AppProvider({ children }) {
 
   useEffect(() => { localStorage.setItem('erasers.pcs', JSON.stringify(pcs)) }, [pcs])
   useEffect(() => { localStorage.setItem('erasers.rosbridge', JSON.stringify(rosbridge)) }, [rosbridge])
+  useEffect(() => { localStorage.setItem('erasers.robotPresets', JSON.stringify(robotPresets)) }, [robotPresets])
+  useEffect(() => { localStorage.setItem('erasers.controls', JSON.stringify(allControls)) }, [allControls])
   useEffect(() => {
     if (activePc) localStorage.setItem('erasers.activePc', activePc)
   }, [activePc])
 
   const [runningTasks, setRunningTasks] = useState({})
 
-  const [topics, setTopics] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('erasers.topics')) || [] } catch { return [] }
+  const [allTopics, setAllTopics] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('erasers.topics'))
+      if (stored && typeof stored === 'object' && !Array.isArray(stored)) return stored
+    } catch { /* ignore */ }
+    return {}
   })
+  const topics = allTopics[tweaks.robotType] ?? []
+  const setTopics = useCallback((updater) => {
+    setAllTopics(prev => {
+      const current = prev[tweaks.robotType] ?? []
+      const next = typeof updater === 'function' ? updater(current) : updater
+      return { ...prev, [tweaks.robotType]: next }
+    })
+  }, [tweaks.robotType])
   useEffect(() => {
-    localStorage.setItem('erasers.topics', JSON.stringify(topics.map(t => ({ ...t, messages: [] }))))
-  }, [topics])
+    localStorage.setItem('erasers.topics', JSON.stringify(
+      Object.fromEntries(
+        Object.entries(allTopics).map(([k, v]) => [k, v.map(t => ({ ...t, messages: [] }))])
+      )
+    ))
+  }, [allTopics])
+
+  const activePreset = robotPresets[tweaks.robotType] ?? defaultPresets[tweaks.robotType]
 
   const value = {
     tweaks, setTweak,
@@ -104,6 +161,8 @@ export function AppProvider({ children }) {
     checkPcStatus,
     runningTasks, setRunningTasks,
     topics, setTopics,
+    robotPresets, setRobotPresets,
+    activePreset,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

@@ -20,9 +20,9 @@ const NAV = [
 ]
 
 function TopBar({ onMenu }) {
-  const { tweaks, telemetry, rosbridge } = useAppContext()
+  const { tweaks, telemetry, rosbridge, activePreset } = useAppContext()
   const { status, connect } = useRos()
-  const r = ROBOT_TYPES[tweaks.robotType] || ROBOT_TYPES["AMR"]
+  const robotLabel = activePreset?.label ?? tweaks.robotType
   const [time, setTime] = useState(new Date())
   useEffect(() => {
     const id = setInterval(() => setTime(new Date()), 1000)
@@ -40,7 +40,7 @@ function TopBar({ onMenu }) {
         <div className="brand-mark">R</div>
         <div className="brand-text">
           <div className="brand-name">ROBOT//OPS</div>
-          <div className="brand-sub">v5.0 · {r.series}</div>
+          <div className="brand-sub">v5.0 · {robotLabel}</div>
         </div>
       </div>
 
@@ -121,7 +121,11 @@ function Drawer({ open, onClose }) {
 }
 
 function TweaksContent() {
-  const { tweaks, setTweak } = useAppContext()
+  const { tweaks, setTweak, robotPresets } = useAppContext()
+  const robotOptions = Object.keys(robotPresets).map(key => ({
+    value: key,
+    label: robotPresets[key]?.label ?? key,
+  }))
   return (
     <>
       <TweakSection label="外観">
@@ -136,29 +140,26 @@ function TweaksContent() {
       </TweakSection>
       <TweakSection label="ロボットタイプ">
         <TweakSelect label="種別" value={tweaks.robotType} onChange={v => setTweak("robotType", v)}
-          options={[
-            { value: "AMR",   label: "移動ロボット (AMR)" },
-            { value: "ARM",   label: "ロボットアーム" },
-            { value: "DRONE", label: "ドローン" },
-            { value: "QUAD",  label: "四足歩行" },
-            { value: "FLEET", label: "フリート (複数台)" },
-          ]} />
+          options={robotOptions} />
       </TweakSection>
     </>
   )
 }
 
 function RosSync() {
-  const { setTelemetry, setUtterances, setOverlayUtterance, screen } = useAppContext()
+  const { setTelemetry, setUtterances, setOverlayUtterance, screen, activePreset } = useAppContext()
   const screenRef = useRef(screen)
   useEffect(() => { screenRef.current = screen }, [screen])
+
+  const speechTopic   = activePreset?.speech?.topic   ?? '/robot/speech'
+  const speechMsgType = activePreset?.speech?.msgType ?? 'std_msgs/String'
 
   const { message: battMsg }   = useRosTopic('/battery_state', 'sensor_msgs/BatteryState')
   const { message: odomMsg }   = useRosTopic('/odom', 'nav_msgs/Odometry', 'subscribe', 100)
   const { message: tempMsg }   = useRosTopic('/temperature', 'sensor_msgs/Temperature')
   const { message: cpuMsg }    = useRosTopic('/cpu_usage', 'std_msgs/Float64')
   const { message: wifiMsg }   = useRosTopic('/wifi_signal', 'std_msgs/Int32')
-  const { message: speechMsg } = useRosTopic('/robot/speech', 'std_msgs/String')
+  const { message: speechMsg } = useRosTopic(speechTopic, speechMsgType)
 
   useEffect(() => {
     if (battMsg == null) return
@@ -192,7 +193,7 @@ function RosSync() {
   }, [wifiMsg])
 
   useEffect(() => {
-    if (!speechMsg) return
+    if (!speechMsg?.data) return
     const u = { id: Date.now() + Math.random(), text: speechMsg.data, time: new Date(), source: 'auto' }
     setUtterances(prev => [u, ...prev].slice(0, 50))
     if (screenRef.current === 'speech') setOverlayUtterance(u)
