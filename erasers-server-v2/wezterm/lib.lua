@@ -19,9 +19,13 @@ end
 function M.build_layout(parent_pane, node, task, pane_cmds)
   if node.program then
     local prog = task.programs[node.program]
-    if prog and prog.command.template ~= "" then
-      local cmd = M.substitute_defaults(prog.command.template, prog.command.variables)
-      pane_cmds[parent_pane] = "hsrb_mode && " .. cmd
+    if prog then
+      local key = prog.default_command or next(prog.commands)
+      local entry = key and prog.commands[key]
+      if entry and entry.template ~= "" then
+        local cmd = M.substitute_defaults(entry.template, entry.variables)
+        pane_cmds[parent_pane] = "hsrb_mode && " .. cmd
+      end
     end
     return
   end

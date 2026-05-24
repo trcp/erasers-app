@@ -9,64 +9,78 @@ local task = {
     storing_groceries = {
       display_name = "Storing Groceries",
       description = "",
-      command = {
-        template = "rosrun robot_tasks storing_groceries.py",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "rosrun robot_tasks storing_groceries.py",
+          kill = "",
+          variables = {},
+        },
       },
     },
     shell = {
       display_name = "Shell",
       description = "Interactive shell",
-      command = {
-        template = "",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "",
+          kill = "",
+          variables = {},
+        },
       },
     },
     vision = {
       display_name = "Vision",
       description = "",
-      command = {
-        template = "roslaunch erasers_vision erasersvisiondebug.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_vision erasersvisiondebug.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     xtion = {
       display_name = "Xtion",
       description = "",
-      command = {
-        template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     devit = {
       display_name = "DeViT",
       description = "",
-      command = {
-        template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=robocup2025-jo.pth docker compose up devit_ros",
-        kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
-        variables = {},
+      commands = {
+        default = {
+          template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=robocup2025-jo.pth docker compose up devit_ros",
+          kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
+          variables = {},
+        },
       },
     },
     yolo = {
       display_name = "Yolo",
       description = "",
-      command = {
-        template = "cd ~/erasers_ws/src/yolo-ros-docker && docker compose up",
-        kill = "cd ~/erasers_ws/src/yolo-ros-docker && docker compose down",
-        variables = {},
+      commands = {
+        default = {
+          template = "cd ~/erasers_ws/src/yolo-ros-docker && docker compose up",
+          kill = "cd ~/erasers_ws/src/yolo-ros-docker && docker compose down",
+          variables = {},
+        },
       },
     },
     navigation = {
       display_name = "Navigation",
       description = "",
-      command = {
-        template = "roslaunch navigation_start navigation.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch navigation_start navigation.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
   },

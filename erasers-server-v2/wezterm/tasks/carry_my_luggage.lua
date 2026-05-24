@@ -9,64 +9,78 @@ local task = {
     carry = {
       display_name = "Carry",
       description = "",
-      command = {
-        template = "roslaunch robot_tasks carry.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch robot_tasks carry.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     navigation = {
       display_name = "Navigation",
       description = "",
-      command = {
-        template = "roslaunch navigation_start navigation_cartographer.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch navigation_start navigation_cartographer.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     cartographer = {
       display_name = "Cartographer",
       description = "",
-      command = {
-        template = "roslaunch cartographer_toyota_hsr hsr_2d.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch cartographer_toyota_hsr hsr_2d.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     xtion = {
       display_name = "Xtion",
       description = "",
-      command = {
-        template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     vision = {
       display_name = "Vision",
       description = "",
-      command = {
-        template = "roslaunch erasers_vision erasersvision.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_vision erasersvision.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     devit = {
       display_name = "DeViT",
       description = "",
-      command = {
-        template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=bags.pth docker compose up devit_ros",
-        kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
-        variables = {},
+      commands = {
+        default = {
+          template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=bags.pth docker compose up devit_ros",
+          kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
+          variables = {},
+        },
       },
     },
     rtmo = {
       display_name = "RTMO",
       description = "",
-      command = {
-        template = "cd ~/erasers_ws/src/rtmo_ros && docker compose up rtmo_ros",
-        kill = "cd ~/erasers_ws/src/rtmo_ros && docker compose down rtmo_ros",
-        variables = {},
+      commands = {
+        default = {
+          template = "cd ~/erasers_ws/src/rtmo_ros && docker compose up rtmo_ros",
+          kill = "cd ~/erasers_ws/src/rtmo_ros && docker compose down rtmo_ros",
+          variables = {},
+        },
       },
     },
   },

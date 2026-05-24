@@ -6,16 +6,22 @@ export function getServerUrl(pc) {
 
 export function flattenTasks(data) {
   return Object.entries(data).flatMap(([taskName, entry]) =>
-    Object.entries(entry.programs).map(([nodeName, node]) => ({
-      id: `${taskName}/${nodeName}`,
-      taskName,
-      nodeName,
-      displayName: node.display_name,
-      taskDisplayName: entry.task.display_name,
-      description: node.description,
-      commandTemplate: node.command.template,
-      variables: node.command.variables || {},
-    }))
+    Object.entries(entry.programs).map(([nodeName, node]) => {
+      const defaultKey = node.default_command || Object.keys(node.commands)[0]
+      const defaultCmd = node.commands[defaultKey] || {}
+      return {
+        id: `${taskName}/${nodeName}`,
+        taskName,
+        nodeName,
+        displayName: node.display_name,
+        taskDisplayName: entry.task.display_name,
+        description: node.description,
+        commands: node.commands,
+        defaultCommandKey: defaultKey,
+        commandTemplate: defaultCmd.template || "",
+        variables: defaultCmd.variables || {},
+      }
+    })
   )
 }
 
@@ -26,10 +32,10 @@ export async function fetchTasks(baseUrl) {
   return flattenTasks(data)
 }
 
-export async function runTask(baseUrl, taskName, nodeName, variables = {}, commandTemplate) {
-  const body = commandTemplate !== undefined
-    ? { ...variables, __command_template__: commandTemplate }
-    : variables
+export async function runTask(baseUrl, taskName, nodeName, variables = {}, commandKey, commandTemplate) {
+  const body = { ...variables }
+  if (commandKey) body.__command_key__ = commandKey
+  if (commandTemplate !== undefined) body.__command_template__ = commandTemplate
   const res = await fetch(`${baseUrl}/run_task/${taskName}/${nodeName}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

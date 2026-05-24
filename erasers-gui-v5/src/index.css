@@ -56,6 +56,22 @@ input, select, textarea { font: inherit; color: inherit; }
 .main { overflow: auto; padding: 18px; }
 @media (max-width: 600px) { .main { padding: 12px; } }
 
+.main[data-screen="speech"] { position: relative; }
+.main[data-screen="speech"]::before {
+  content: "";
+  position: fixed;
+  inset: 56px 0 0 0;
+  background-image:
+    linear-gradient(rgba(160,160,170,0.45), rgba(160,160,170,0.45)),
+    url("/speech-bg.png");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0.35;
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* --- Topbar --- */
 .topbar {
   display: flex; align-items: center; gap: 12px;

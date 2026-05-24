@@ -9,55 +9,67 @@ local task = {
     shell = {
       display_name = "Shell",
       description = "Interactive shell",
-      command = {
-        template = "",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "",
+          kill = "",
+          variables = {},
+        },
       },
     },
     navigation = {
       display_name = "Navigation",
       description = "",
-      command = {
-        template = "roslaunch navigation_start navigation.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch navigation_start navigation.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     xtion = {
       display_name = "Xtion",
       description = "",
-      command = {
-        template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     vision = {
       display_name = "Vision",
       description = "",
-      command = {
-        template = "roslaunch erasers_vision erasersvision.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_vision erasersvision.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     devit = {
       display_name = "DeViT",
       description = "",
-      command = {
-        template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=stickler_for_the_rules.pth docker compose up devit_ros",
-        kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
-        variables = {},
+      commands = {
+        default = {
+          template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=stickler_for_the_rules.pth docker compose up devit_ros",
+          kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
+          variables = {},
+        },
       },
     },
     rtmo = {
       display_name = "RTMO",
       description = "",
-      command = {
-        template = "cd ~/erasers_ws/src/rtmo_ros && docker compose up rtmo_ros",
-        kill = "cd ~/erasers_ws/src/rtmo_ros && docker compose down rtmo_ros",
-        variables = {},
+      commands = {
+        default = {
+          template = "cd ~/erasers_ws/src/rtmo_ros && docker compose up rtmo_ros",
+          kill = "cd ~/erasers_ws/src/rtmo_ros && docker compose down rtmo_ros",
+          variables = {},
+        },
       },
     },
   },

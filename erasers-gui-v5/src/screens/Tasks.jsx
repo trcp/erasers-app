@@ -26,8 +26,15 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
   const [launching, setLaunching]     = useState(false)
   const [editedTemplates, setEditedTemplates] = useState({})
   const [editingTemplate, setEditingTemplate] = useState(false)
+  const [selectedCommandKeys, setSelectedCommandKeys] = useState({})
 
   useEffect(() => { setEditingTemplate(false) }, [selectedId])
+
+  const getCommandKey = (program) =>
+    selectedCommandKeys[program.id] || program.defaultCommandKey
+
+  const getActiveCommand = (program) =>
+    program.commands?.[getCommandKey(program)] || {}
 
   // タスク画面に切り替えたとき、または activePc 変更時にサーバからタスクを取得
   useEffect(() => {
@@ -80,12 +87,14 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
   const launch = async (program) => {
     const pc = pcs.find(p => p.id === activePc)
     if (!pc) return
+    const commandKey = getCommandKey(program)
+    const activeCmd = getActiveCommand(program)
     const editedTemplate = editedTemplates[program.id]
-    const templateOverride = editedTemplate !== undefined && editedTemplate !== program.commandTemplate
+    const templateOverride = editedTemplate !== undefined && editedTemplate !== activeCmd.template
       ? editedTemplate
       : undefined
     try {
-      await runTask(getServerUrl(pc), program.taskName, program.nodeName, program.variables, templateOverride)
+      await runTask(getServerUrl(pc), program.taskName, program.nodeName, activeCmd.variables || {}, commandKey, templateOverride)
       setRunningTasks(prev => ({
         ...prev,
         [activePc]: [...(prev[activePc] || []), {
@@ -278,11 +287,32 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
                 <div className="detail-label">説明</div>
                 <div style={{ fontSize: 13 }}>{selected.description || "—"}</div>
               </div>
+              {Object.keys(selected.commands || {}).length > 1 && (
+                <div>
+                  <div className="detail-label">コマンド</div>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {Object.keys(selected.commands).map(key => {
+                      const active = getCommandKey(selected) === key
+                      return (
+                        <button key={key}
+                          className={`btn sm${active ? " primary" : ""}`}
+                          onClick={() => {
+                            setSelectedCommandKeys(prev => ({ ...prev, [selected.id]: key }))
+                            setEditedTemplates(prev => { const n = { ...prev }; delete n[selected.id]; return n })
+                          }}
+                        >
+                          {key}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <div className="detail-label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   コマンドテンプレート
                   <div style={{ marginLeft: "auto", display: "flex", gap: 4 }}>
-                    {editedTemplates[selected.id] !== undefined && editedTemplates[selected.id] !== selected.commandTemplate && (
+                    {editedTemplates[selected.id] !== undefined && editedTemplates[selected.id] !== getActiveCommand(selected).template && (
                       <button
                         className="btn sm"
                         style={{ fontSize: 10, padding: "2px 8px" }}
@@ -313,17 +343,17 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
                 <textarea
                   className="cmd-block mono"
                   style={{ width: "100%", resize: editingTemplate ? "vertical" : "none", minHeight: 60, boxSizing: "border-box", border: "none", outline: "none", background: "transparent", color: "var(--ink)", cursor: editingTemplate ? "text" : "default" }}
-                  value={editedTemplates[selected.id] ?? selected.commandTemplate ?? ""}
+                  value={editedTemplates[selected.id] ?? getActiveCommand(selected).template ?? ""}
                   readOnly={!editingTemplate}
                   onChange={e => setEditedTemplates(prev => ({ ...prev, [selected.id]: e.target.value }))}
                   spellCheck={false}
                 />
               </div>
-              {Object.keys(selected.variables).length > 0 && (
+              {Object.keys(getActiveCommand(selected).variables || {}).length > 0 && (
                 <div>
                   <div className="detail-label">変数</div>
                   <div style={{ display: "grid", gap: 4 }}>
-                    {Object.entries(selected.variables).map(([k, v]) => (
+                    {Object.entries(getActiveCommand(selected).variables).map(([k, v]) => (
                       <div key={k} style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: 8, fontSize: 11, fontFamily: "var(--mono)" }}>
                         <span style={{ color: "var(--ink-3)" }}>{k}:</span>
                         <span style={{ color: "var(--ink)" }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>

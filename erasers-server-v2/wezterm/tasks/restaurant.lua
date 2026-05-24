@@ -9,55 +9,67 @@ local task = {
     cartographer = {
       display_name = "Cartographer",
       description = "",
-      command = {
-        template = "roslaunch cartographer_toyota_hsr hsr_2d.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch cartographer_toyota_hsr hsr_2d.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     navigation = {
       display_name = "Navigation",
       description = "",
-      command = {
-        template = "roslaunch navigation_start navigation_cartographer.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch navigation_start navigation_cartographer.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     xtion = {
       display_name = "Xtion",
       description = "",
-      command = {
-        template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     vision = {
       display_name = "Vision",
       description = "",
-      command = {
-        template = "roslaunch erasers_vision erasersvisiondebug.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_vision erasersvisiondebug.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     hmi = {
       display_name = "HMI",
       description = "",
-      command = {
-        template = "rosrun erasers_hmi_ros cli_node.py",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "rosrun erasers_hmi_ros cli_node.py",
+          kill = "",
+          variables = {},
+        },
       },
     },
     restaurant = {
       display_name = "Restaurant",
       description = "",
-      command = {
-        template = "roslaunch robot_tasks restaurant_main.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch robot_tasks restaurant_main.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
   },

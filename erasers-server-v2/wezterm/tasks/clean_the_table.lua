@@ -9,46 +9,56 @@ local task = {
     clean_table = {
       display_name = "Clean Table",
       description = "",
-      command = {
-        template = "rosrun robot_tasks clean_table.py",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "rosrun robot_tasks clean_table.py",
+          kill = "",
+          variables = {},
+        },
       },
     },
     vision = {
       display_name = "Vision",
       description = "",
-      command = {
-        template = "roslaunch erasers_vision erasersvisiondebug.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_vision erasersvisiondebug.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     xtion = {
       display_name = "Xtion",
       description = "",
-      command = {
-        template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch erasers_xtion_republisher erasers_xtion_republisher.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
     devit = {
       display_name = "DeViT",
       description = "",
-      command = {
-        template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=robocup2024.pth docker compose up devit_ros",
-        kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
-        variables = {},
+      commands = {
+        default = {
+          template = "cd ~/erasers_ws/src/devit_ros && CATEGORY_SPACE=robocup2024.pth docker compose up devit_ros",
+          kill = "cd ~/erasers_ws/src/devit_ros && docker compose down devit_ros",
+          variables = {},
+        },
       },
     },
     navigation = {
       display_name = "Navigation",
       description = "",
-      command = {
-        template = "roslaunch navigation_start navigation.launch",
-        kill = "",
-        variables = {},
+      commands = {
+        default = {
+          template = "roslaunch navigation_start navigation.launch",
+          kill = "",
+          variables = {},
+        },
       },
     },
   },

@@ -33,23 +33,28 @@ def get_ip_address(ifname):
 
 
 class NodeData:
+    class Command:
+        template = ""
+        kill = ""
+        variables = {}
+
     def __init__(self):
         self.node_name = ""
         self.display_name = ""
         self.description = ""
-
-        class Command:
-            template = ""
-            kill = ""
-            variables = {}
-
-        self.command = Command()
+        self.commands = {}        # { key: Command }
+        self.default_command = "default"
+        self.active_command_key = None
 
         self.proc = None
         self.log_file = None
         self.log_file_name = None
 
         self.network_if = "wlo1"
+
+    def get_command(self, key=None):
+        k = key or self.default_command
+        return self.commands.get(k) or next(iter(self.commands.values()), None)
 
     def build_cmd(self, template, ros_master_uri, opt):
         logger.debug(f"build_cmd: template={template!r}, ros_master_uri={ros_master_uri}, opt={opt}")
@@ -76,11 +81,16 @@ class NodeData:
         return cmd, env
 
     def run(self, body, ros_master_uri):
-        if "start_time" in body:
-            self.command.variables["start_time"]["default"] = body["start_time"]
+        command_key = body.get("__command_key__")
+        cmd_obj = self.get_command(command_key)
+        self.active_command_key = command_key or self.default_command
 
-        template = body.get("__command_template__", self.command.template)
-        clean_body = {k: v for k, v in body.items() if k != "__command_template__"}
+        if "start_time" in body and "start_time" in cmd_obj.variables:
+            cmd_obj.variables["start_time"]["default"] = body["start_time"]
+
+        template = body.get("__command_template__", cmd_obj.template)
+        clean_body = {k: v for k, v in body.items()
+                      if k not in ("__command_template__", "__command_key__")}
         cmd, my_env = self.build_cmd(template, ros_master_uri, clean_body)
 
         if self.proc is not None:
@@ -131,10 +141,10 @@ class NodeData:
                 except ProcessLookupError:
                     pass
 
-        if self.command.kill != "":
-            cmd = self.command.kill
-            logger.info(f"[{self.node_name}] $ {' '.join(cmd)}")
-            subprocess.Popen(cmd, shell=True)
+        cmd_obj = self.commands.get(self.active_command_key or self.default_command)
+        if cmd_obj and cmd_obj.kill != "":
+            logger.info(f"[{self.node_name}] $ {cmd_obj.kill}")
+            subprocess.Popen(cmd_obj.kill, shell=True)
 
         self.proc = None
 
@@ -166,10 +176,16 @@ class TaskData:
             node_data.node_name = node
             node_data.display_name = config["programs"][node]["display_name"]
             node_data.description = config["programs"][node]["description"]
-            node_data.command.template = config["programs"][node]["command"]["template"]
-            node_data.command.kill = config["programs"][node]["command"]["kill"]
-            node_data.command.variables = config["programs"][node]["command"]["variables"]
             node_data.network_if = network_if
+
+            raw_cmds = config["programs"][node]["commands"]
+            node_data.default_command = config["programs"][node].get("default_command") or next(iter(raw_cmds))
+            for key, raw_cmd in raw_cmds.items():
+                c = NodeData.Command()
+                c.template  = raw_cmd["template"]
+                c.kill      = raw_cmd["kill"]
+                c.variables = raw_cmd["variables"]
+                node_data.commands[key] = c
 
             self.programs[node] = node_data
 
@@ -196,5 +212,5 @@ class TaskData:
 
 if __name__ == "__main__":
     task_data = TaskData(os.path.expanduser("~/erasers_ws/wezterm/tasks/tidyup.lua"))
-    print(task_data.programs["yolo"].command.template)
+    print(task_data.programs["yolo"].get_command().template)
     print(task_data.to_json())

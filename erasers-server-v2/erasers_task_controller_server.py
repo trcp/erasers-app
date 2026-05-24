@@ -71,7 +71,7 @@ class ErasersTaskControlServer:
         return {"saved": True, "path": str(p)}
 
     def set_time(self, task_name: str, node_name: str, body=Body(...)):
-        self.task_data_list[task_name].programs[node_name].command.variables["start_time"]["default"] = int(body)
+        self.task_data_list[task_name].programs[node_name].get_command().variables["start_time"]["default"] = int(body)
         return {"set": True}
 
     def get_task(self):
