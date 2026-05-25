@@ -125,23 +125,34 @@ function TeleopTab({ telemetry, controls, setControls }) {
   useEffect(() => { controlsRef.current = controls }, [controls])
   useEffect(() => { publishRef.current = publish }, [publish])
 
-  const updateLin = useCallback((newLin) => {
-    linRef.current = newLin
-    setLin(newLin)
+  const publishCurrent = useCallback(() => {
     publishRef.current({
-      linear:  { x: newLin.y * controlsRef.current.maxSpeed, y: -newLin.x * controlsRef.current.maxSpeed, z: 0 },
+      linear:  { x: linRef.current.y * controlsRef.current.maxSpeed, y: -linRef.current.x * controlsRef.current.maxSpeed, z: 0 },
       angular: { x: 0, y: 0, z: -rotRef.current.x * controlsRef.current.maxRot * Math.PI / 180 },
     })
   }, [])
 
+  const updateLin = useCallback((newLin) => {
+    linRef.current = newLin
+    setLin(newLin)
+    publishCurrent()
+  }, [publishCurrent])
+
   const updateRot = useCallback((newRot) => {
     rotRef.current = newRot
     setRot(newRot)
-    publishRef.current({
-      linear:  { x: linRef.current.y * controlsRef.current.maxSpeed, y: -linRef.current.x * controlsRef.current.maxSpeed, z: 0 },
-      angular: { x: 0, y: 0, z: -newRot.x * controlsRef.current.maxRot * Math.PI / 180 },
-    })
-  }, [])
+    publishCurrent()
+  }, [publishCurrent])
+
+  // 非ゼロの間は 20Hz でパブリッシュし続ける
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { x: lx, y: ly } = linRef.current
+      const { x: rx } = rotRef.current
+      if (lx !== 0 || ly !== 0 || rx !== 0) publishCurrent()
+    }, 50)
+    return () => clearInterval(id)
+  }, [publishCurrent])
 
   // Gamepad support via Gamepad API
   const [gamepadName, setGamepadName] = useState(null)
