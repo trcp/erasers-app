@@ -55,6 +55,23 @@ function Section({ title, sub, tools, children, style }) {
   )
 }
 
+function SubSection({ label, first = false, children }) {
+  return (
+    <div style={{
+      borderTop: first ? 'none' : '1px solid var(--border)',
+      paddingTop: first ? 0 : 16,
+      marginTop: first ? 0 : 4,
+      marginBottom: 16,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+        <div style={{ width: 3, height: 12, background: 'var(--accent)', borderRadius: 2, flexShrink: 0 }} />
+        <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-2)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.08em' }}>{label}</span>
+      </div>
+      {children}
+    </div>
+  )
+}
+
 function RosConfigModal({ pc, onClose }) {
   const [networkIfs, setNetworkIfs] = useState([])
   const [rosConfig, setRosConfig]   = useState({ network_if: "", ros_master_uri: "localhost" })
@@ -784,59 +801,52 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
           </div>
         }
       >
-        {/* Speech config */}
-        <div style={{ marginBottom: 16 }}>
-          <div className="form-label" style={{ marginBottom: 8 }}>発話モニター · 受信トピック</div>
+        <SubSection label="発話モニター · 受信トピック" first>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: 8, alignItems: 'end' }} className="rosbridge-form">
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>トピック</span>
+              <span className="form-label">トピック</span>
               <input className="input mono" list="preset-topic-names" value={activePreset?.speech?.topic ?? ''} onChange={e => handleTopicChange(updateSpeech, e.target.value)} placeholder="/robot/speech" />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>メッセージ型</span>
+              <span className="form-label">メッセージ型</span>
               <input className="input mono" value={activePreset?.speech?.msgType ?? ''} onChange={e => updateSpeech('msgType', e.target.value)} placeholder="std_msgs/String" />
             </label>
             <button className="btn sm" onClick={resetToDefault} title="公開プリセットファイルからリセット">
               <I.refresh size={12} /> デフォルト
             </button>
           </div>
-        </div>
+        </SubSection>
 
-        {/* Battery config */}
-        <div style={{ marginBottom: 16 }}>
-          <div className="form-label" style={{ marginBottom: 8 }}>バッテリー · 受信トピック</div>
+        <SubSection label="バッテリー · 受信トピック">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>トピック</span>
+              <span className="form-label">トピック</span>
               <input className="input mono" list="preset-topic-names" value={activePreset?.battery?.topic ?? ''} onChange={e => handleTopicChange(updateBattery, e.target.value)} placeholder="/battery_state" />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>メッセージ型</span>
+              <span className="form-label">メッセージ型</span>
               <input className="input mono" value={activePreset?.battery?.msgType ?? ''} onChange={e => updateBattery('msgType', e.target.value)} placeholder="sensor_msgs/BatteryState" />
             </label>
           </div>
           <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
             BatteryState: percentage (0–1) · Float32/64: data (0–100)
           </div>
-        </div>
+        </SubSection>
 
-        {/* CmdVel config */}
-        <div style={{ marginBottom: 16 }}>
-          <div className="form-label" style={{ marginBottom: 8 }}>速度指令 · トピック</div>
+        <SubSection label="速度指令 · トピック">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>トピック</span>
+              <span className="form-label">トピック</span>
               <input className="input mono" list="preset-topic-names" value={activePreset?.cmdVel?.topic ?? ''} onChange={e => handleTopicChange(updateCmdVel, e.target.value)} placeholder="/cmd_vel" />
             </label>
             <label style={{ display: 'grid', gap: 4 }}>
-              <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>メッセージ型</span>
+              <span className="form-label">メッセージ型</span>
               <input className="input mono" value={activePreset?.cmdVel?.msgType ?? ''} onChange={e => updateCmdVel('msgType', e.target.value)} placeholder="geometry_msgs/Twist" />
             </label>
           </div>
-        </div>
+        </SubSection>
 
-        {/* Mode groups */}
-        <div className="form-label" style={{ marginBottom: 8 }}>操作モードプリセット</div>
+        <SubSection label="操作モードプリセット">
         <div style={{ display: 'grid', gap: 8 }}>
           {modeGroups.map((g, gi) => (
             <div key={gi} style={{ border: '1px solid var(--border)', borderRadius: 8, overflow: 'hidden' }}>
@@ -897,6 +907,7 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
             </button>
           )}
         </div>
+        </SubSection>
       </Section>}
 
       <datalist id="preset-topic-names">
