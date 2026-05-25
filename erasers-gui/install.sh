@@ -21,20 +21,21 @@ sudo systemctl enable erasers.gui.service || die "Failed to enable service"
 log "systemd service enabled"
 
 # Autostart
-AUTOSTART_DIR="/home/hsr-hmi/.config/autostart"
-AUTOSTART_FILE="$AUTOSTART_DIR/erasers-gui.desktop"
 
-log "Configuring autostart..."
-mkdir -p "$AUTOSTART_DIR"
-cat > "$AUTOSTART_FILE" <<EOF
-[Desktop Entry]
-Type=Application
-Name=Erasers GUI
-Exec=/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
-Hidden=false
-NoDisplay=false
-X-GNOME-Autostart-enabled=true
-EOF
-log "Autostart configured: $AUTOSTART_FILE"
+# AUTOSTART_DIR="/home/hsr-hmi/.config/autostart"
+# AUTOSTART_FILE="$AUTOSTART_DIR/erasers-gui.desktop"
 
-log "Installation complete"
+# log "Configuring autostart..."
+# mkdir -p "$AUTOSTART_DIR"
+# cat > "$AUTOSTART_FILE" <<EOF
+# [Desktop Entry]
+# Type=Application
+# Name=Erasers GUI
+# Exec=/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
+# Hidden=false
+# NoDisplay=false
+# X-GNOME-Autostart-enabled=true
+# EOF
+# log "Autostart configured: $AUTOSTART_FILE"
+
+# log "Installation complete"
