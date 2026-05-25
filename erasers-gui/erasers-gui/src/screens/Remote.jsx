@@ -84,8 +84,8 @@ function Joystick({ label, onChange, value }) {
         }} />
       </div>
       <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-2)", display: "flex", gap: 10 }}>
-        <span>X: <span style={{ color: "var(--ink)" }}>{v.x.toFixed(2)}</span></span>
-        <span>Y: <span style={{ color: "var(--ink)" }}>{v.y.toFixed(2)}</span></span>
+        <span>X: <span style={{ color: "var(--ink)" }}>{v.y.toFixed(2)}</span></span>
+        <span>Y: <span style={{ color: "var(--ink)" }}>{(-v.x).toFixed(2)}</span></span>
       </div>
     </div>
   )
@@ -223,9 +223,6 @@ function TeleopTab({ telemetry, controls, setControls }) {
           <Joystick label="回転 (ROT)" onChange={updateRot} value={rot} />
         </div>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 10, fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)", flexWrap: "wrap" }}>
-          <span>VX: <span style={{ color: "var(--ink)" }}>{(-lin.y * controls.maxSpeed).toFixed(2)} m/s</span></span>
-          <span>VY: <span style={{ color: "var(--ink)" }}>{(-lin.x * controls.maxSpeed).toFixed(2)} m/s</span></span>
-          <span>ω: <span style={{ color: "var(--ink)" }}>{(-rot.x * controls.maxRot).toFixed(0)} °/s</span></span>
           <span style={{ color: "var(--ink-3)" }}>→ {cmdVelTopic}</span>
         </div>
         {!gamepadName && (
