@@ -744,49 +744,6 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         </div>
       </Section>
 
-      <Section title="遠隔PC管理" sub={`${pcs.length} 台登録`}>
-        <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
-          {pcs.map(pc => (
-            <div key={pc.id} className="pc-list-row">
-              <span className={`pc-led ${pc.online ? "online" : "offline"}`} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontWeight: 600, fontSize: 13 }}>{pc.name}</div>
-                <div className="mono" style={{ fontSize: 10, color: "var(--ink-3)" }}>{pc.host}</div>
-                {rosConfigs[pc.id] && (
-                  <div className="mono" style={{ fontSize: 10, color: "var(--ink-3)", marginTop: 2 }}>
-                    {rosConfigs[pc.id].network_if} {rosConfigs[pc.id].ip ? `(${rosConfigs[pc.id].ip})` : ""} · {rosConfigs[pc.id].ros_master_uri}
-                  </div>
-                )}
-              </div>
-              {activePc === pc.id ? (
-                <span className="chip" style={{ background: "var(--accent-2)", color: "var(--accent)", borderColor: "transparent" }}>使用中</span>
-              ) : (
-                <button className="btn sm" onClick={() => setActivePc(pc.id)}>選択</button>
-              )}
-              <button className="btn sm" onClick={() => setRosModalPc(pc)}><I.settings size={12} /> ROS1</button>
-              <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => removePc(pc.id)}><I.trash size={12} /></button>
-            </div>
-          ))}
-        </div>
-        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
-          <div className="form-label" style={{ marginBottom: 8 }}>新規PC追加</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "start" }} className="pc-add-form">
-            <input className="input" placeholder="名前 (例: robot-pc-01)" value={newPc.name} onChange={e => setNewPc(p => ({ ...p, name: e.target.value }))} />
-            <div style={{ display: "grid", gap: 4 }}>
-              <input className="input mono" placeholder="192.168.1.20" value={newPc.host}
-                onChange={e => setNewPc(p => ({ ...p, host: e.target.value }))}
-                style={newPcHostInvalid ? { borderColor: "var(--danger, #e53e3e)" } : undefined} />
-              {newPcHostInvalid && <span style={{ fontSize: 11, color: "var(--danger, #e53e3e)", fontFamily: "var(--mono)" }}>無効なホスト / IPアドレスです</span>}
-            </div>
-            <button className="btn primary" onClick={addPc} disabled={!newPc.name || !newPc.host || newPcHostInvalid}>
-              <I.plus size={14} /> 追加
-            </button>
-          </div>
-        </div>
-      </Section>
-
-      {rosModalPc && <RosConfigModal pc={rosModalPc} onClose={() => { loadRosConfig(rosModalPc); setRosModalPc(null) }} />}
-
       {/* Preset editor — ロボットタイプが選択されているときのみ表示 */}
       {robotPresets[robotType] && <Section
         title="ロボットプリセット設定"
@@ -909,6 +866,49 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         </div>
         </SubSection>
       </Section>}
+
+      <Section title="遠隔PC管理" sub={`${pcs.length} 台登録`}>
+        <div style={{ display: "grid", gap: 6, marginBottom: 12 }}>
+          {pcs.map(pc => (
+            <div key={pc.id} className="pc-list-row">
+              <span className={`pc-led ${pc.online ? "online" : "offline"}`} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 600, fontSize: 13 }}>{pc.name}</div>
+                <div className="mono" style={{ fontSize: 10, color: "var(--ink-3)" }}>{pc.host}</div>
+                {rosConfigs[pc.id] && (
+                  <div className="mono" style={{ fontSize: 10, color: "var(--ink-3)", marginTop: 2 }}>
+                    {rosConfigs[pc.id].network_if} {rosConfigs[pc.id].ip ? `(${rosConfigs[pc.id].ip})` : ""} · {rosConfigs[pc.id].ros_master_uri}
+                  </div>
+                )}
+              </div>
+              {activePc === pc.id ? (
+                <span className="chip" style={{ background: "var(--accent-2)", color: "var(--accent)", borderColor: "transparent" }}>使用中</span>
+              ) : (
+                <button className="btn sm" onClick={() => setActivePc(pc.id)}>選択</button>
+              )}
+              <button className="btn sm" onClick={() => setRosModalPc(pc)}><I.settings size={12} /> ROS1</button>
+              <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => removePc(pc.id)}><I.trash size={12} /></button>
+            </div>
+          ))}
+        </div>
+        <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+          <div className="form-label" style={{ marginBottom: 8 }}>新規PC追加</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "start" }} className="pc-add-form">
+            <input className="input" placeholder="名前 (例: robot-pc-01)" value={newPc.name} onChange={e => setNewPc(p => ({ ...p, name: e.target.value }))} />
+            <div style={{ display: "grid", gap: 4 }}>
+              <input className="input mono" placeholder="192.168.1.20" value={newPc.host}
+                onChange={e => setNewPc(p => ({ ...p, host: e.target.value }))}
+                style={newPcHostInvalid ? { borderColor: "var(--danger, #e53e3e)" } : undefined} />
+              {newPcHostInvalid && <span style={{ fontSize: 11, color: "var(--danger, #e53e3e)", fontFamily: "var(--mono)" }}>無効なホスト / IPアドレスです</span>}
+            </div>
+            <button className="btn primary" onClick={addPc} disabled={!newPc.name || !newPc.host || newPcHostInvalid}>
+              <I.plus size={14} /> 追加
+            </button>
+          </div>
+        </div>
+      </Section>
+
+      {rosModalPc && <RosConfigModal pc={rosModalPc} onClose={() => { loadRosConfig(rosModalPc); setRosModalPc(null) }} />}
 
       <datalist id="preset-topic-names">
         {rosTopics.map(t => <option key={t.name} value={t.name}>{t.type}</option>)}
