@@ -438,6 +438,53 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
 
   const [rosModalPc, setRosModalPc] = useState(null)
 
+  // --- Robot type management ---
+  const [addingRobot, setAddingRobot] = useState(false)
+  const [newRobotName, setNewRobotName] = useState('')
+  const [renamingKey, setRenamingKey] = useState(null)
+  const [renameValue, setRenameValue] = useState('')
+
+  const addRobotType = () => {
+    const name = newRobotName.trim()
+    if (!name) return
+    const key = 'robot_' + Date.now()
+    setRobotPresets(prev => ({
+      ...prev,
+      [key]: {
+        label: name,
+        speech:  { topic: '/robot/speech',  msgType: 'std_msgs/String' },
+        battery: { topic: '/battery_state', msgType: 'sensor_msgs/BatteryState' },
+        cmdVel:  { topic: '/cmd_vel',       msgType: 'geometry_msgs/Twist' },
+        modeGroups: [],
+      },
+    }))
+    setRobotType(key)
+    setNewRobotName('')
+    setAddingRobot(false)
+  }
+
+  const removeRobotType = (key) => {
+    const keys = Object.keys(robotPresets)
+    if (keys.length <= 1) return
+    setRobotPresets(prev => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    if (robotType === key) setRobotType(keys.find(k => k !== key))
+  }
+
+  const startRename = (key, currentLabel) => {
+    setRenamingKey(key)
+    setRenameValue(currentLabel)
+  }
+
+  const commitRename = (key) => {
+    const label = renameValue.trim()
+    if (label) setRobotPresets(prev => ({ ...prev, [key]: { ...prev[key], label } }))
+    setRenamingKey(null)
+  }
+
   // --- Preset editor state ---
   const [editModal, setEditModal]     = useState(null) // { groupIdx, modeIdx } or null
   const [addingGroup, setAddingGroup] = useState(false)
@@ -556,23 +603,68 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         </div>
       </div>
 
-      <Section title="ロボットの種類" sub="ROBOT_PROFILE">
+      <Section title="ロボットの種類" sub="ROBOT_PROFILE" tools={
+        <button className="btn primary sm" onClick={() => { setAddingRobot(true); setNewRobotName('') }}>
+          <I.plus size={12} /> 追加
+        </button>
+      }>
         <div className="robot-type-grid">
           {Object.entries(robotPresets).map(([key, preset]) => {
-            const defaultIcons = { AMR: I.rocket, ARM: I.joystick, DRONE: I.rocket, QUAD: I.rocket, FLEET: I.map }
-            const Icon = defaultIcons[key] || I.power
             const count = preset?.modeGroups?.flatMap(g => g.modes).length ?? 0
             const label = preset?.label ?? key
+            const isLast = Object.keys(robotPresets).length === 1
             return (
-              <button key={key} onClick={() => setRobotType(key)}
-                className={`robot-type-card ${robotType === key ? "active" : ""}`}>
-                <Icon size={22} />
-                <div className="robot-type-label">{label}</div>
-                <div className="robot-type-modes mono">{count} モード</div>
-              </button>
+              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {renamingKey === key ? (
+                  <div className="robot-type-card" style={{ alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>名前を変更</span>
+                    <input className="input" autoFocus value={renameValue}
+                      onChange={e => setRenameValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') commitRename(key); if (e.key === 'Escape') setRenamingKey(null) }}
+                      style={{ textAlign: 'center', padding: '4px 8px', fontSize: 13, width: '100%', boxSizing: 'border-box' }} />
+                    <div style={{ display: 'flex', gap: 4, justifyContent: 'center' }}>
+                      <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => commitRename(key)}><I.check size={12} /></button>
+                      <button className="icon-btn" style={{ width: 28, height: 28 }} onClick={() => setRenamingKey(null)}><I.x size={12} /></button>
+                    </div>
+                  </div>
+                ) : (
+                  <button onClick={() => setRobotType(key)}
+                    className={`robot-type-card ${robotType === key ? "active" : ""}`}
+                    style={{ width: '100%' }}>
+                    <I.joystick size={22} />
+                    <div className="robot-type-label">{label}</div>
+                    <div className="robot-type-modes mono">{count} モード</div>
+                  </button>
+                )}
+                {renamingKey !== key && (
+                  <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
+                    <button className="icon-btn" style={{ width: 24, height: 24 }} title="名前を変更"
+                      onClick={() => startRename(key, label)}>
+                      <I.settings size={10} />
+                    </button>
+                    {!isLast && (
+                      <button className="icon-btn" style={{ width: 24, height: 24 }} title="削除"
+                        onClick={() => removeRobotType(key)}>
+                        <I.trash size={10} />
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             )
           })}
         </div>
+
+        {addingRobot && (
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <input className="input" autoFocus placeholder="ロボット名 (例: HSR)" value={newRobotName}
+              onChange={e => setNewRobotName(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') addRobotType(); if (e.key === 'Escape') { setAddingRobot(false); setNewRobotName('') } }} />
+            <button className="btn primary" onClick={addRobotType}><I.plus size={14} /> 追加</button>
+            <button className="btn" onClick={() => { setAddingRobot(false); setNewRobotName('') }}><I.x size={14} /></button>
+          </div>
+        )}
+
         <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--surface-2)", borderRadius: 6, border: "1px solid var(--border)", fontSize: 11, color: "var(--ink-3)", fontFamily: "var(--mono)" }}>
           ※ ロボットの種類によって、発話モニターの受信トピックと遠隔操作の操作モードが切り替わります
         </div>

@@ -20,10 +20,12 @@ function Section({ title, sub, tools, children, style }) {
   )
 }
 
-function Joystick({ label, onChange }) {
+function Joystick({ label, onChange, value }) {
   const ref = useRef(null)
   const [drag, setDrag] = useState(false)
-  const [v, setV] = useState({ x: 0, y: 0 })
+  // value prop で外部制御 (ゲームパッド) を受け付けつつ、タッチ/マウス操作時は内部状態を使う
+  const [localV, setLocalV] = useState({ x: 0, y: 0 })
+  const v = drag ? localV : (value ?? localV)
 
   const updateFromEvent = (e) => {
     const el = ref.current; if (!el) return
@@ -36,11 +38,11 @@ function Joystick({ label, onChange }) {
     const m = Math.sqrt(dx*dx + dy*dy)
     if (m > 1) { dx /= m; dy /= m; }
     const newV = { x: dx, y: -dy }
-    setV(newV); onChange && onChange(newV)
+    setLocalV(newV); onChange && onChange(newV)
   }
 
   const start = (e) => { e.preventDefault(); setDrag(true); updateFromEvent(e) }
-  const end = () => { setDrag(false); setV({ x: 0, y: 0 }); onChange && onChange({ x: 0, y: 0 }) }
+  const end = () => { setDrag(false); setLocalV({ x: 0, y: 0 }); onChange && onChange({ x: 0, y: 0 }) }
 
   useEffect(() => {
     if (!drag) return
@@ -59,6 +61,7 @@ function Joystick({ label, onChange }) {
   }, [drag])
 
   const knobX = v.x * 50; const knobY = -v.y * 50
+  const active = drag || (v.x !== 0 || v.y !== 0)
   return (
     <div style={{ display: "grid", gap: 8, justifyItems: "center" }}>
       <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{label}</div>
@@ -75,9 +78,9 @@ function Joystick({ label, onChange }) {
           position: "absolute", top: "50%", left: "50%",
           transform: `translate(calc(-50% + ${knobX}%), calc(-50% + ${knobY}%))`,
           width: "35%", aspectRatio: "1/1", borderRadius: "50%",
-          background: drag ? "var(--accent)" : "var(--ink)",
+          background: active ? "var(--accent)" : "var(--ink)",
           boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
-          transition: drag ? "none" : "transform .25s, background .15s",
+          transition: drag ? "none" : "transform .15s, background .15s",
         }} />
       </div>
       <div style={{ fontFamily: "var(--mono)", fontSize: 10, color: "var(--ink-2)", display: "flex", gap: 10 }}>
@@ -101,6 +104,11 @@ function SliderRow({ label, value, min, max, step, unit, onChange }) {
   )
 }
 
+const GAMEPAD_DEADZONE = 0.08
+function applyDeadzone(v) {
+  return Math.abs(v) < GAMEPAD_DEADZONE ? 0 : (v - Math.sign(v) * GAMEPAD_DEADZONE) / (1 - GAMEPAD_DEADZONE)
+}
+
 function TeleopTab({ telemetry, controls, setControls }) {
   const { activePreset } = useAppContext()
   const cmdVelTopic   = activePreset?.cmdVel?.topic   ?? '/cmd_vel'
@@ -109,21 +117,87 @@ function TeleopTab({ telemetry, controls, setControls }) {
   const [rot, setRot] = useState({ x: 0, y: 0 })
   const { publish } = useRosTopic(cmdVelTopic, cmdVelMsgType, 'publish')
 
-  const handleLin = (newLin) => {
-    setLin(newLin)
-    publish({
-      linear:  { x: -newLin.y * controls.maxSpeed, y: -newLin.x * controls.maxSpeed, z: 0 },
-      angular: { x: 0, y: 0, z: -rot.x * controls.maxRot * Math.PI / 180 },
-    })
-  }
+  // Refs to avoid stale closures in RAF/gamepad polling
+  const linRef = useRef({ x: 0, y: 0 })
+  const rotRef = useRef({ x: 0, y: 0 })
+  const controlsRef = useRef(controls)
+  const publishRef = useRef(publish)
+  useEffect(() => { controlsRef.current = controls }, [controls])
+  useEffect(() => { publishRef.current = publish }, [publish])
 
-  const handleRot = (newRot) => {
-    setRot(newRot)
-    publish({
-      linear:  { x: -lin.y * controls.maxSpeed, y: -lin.x * controls.maxSpeed, z: 0 },
-      angular: { x: 0, y: 0, z: -newRot.x * controls.maxRot * Math.PI / 180 },
+  const updateLin = useCallback((newLin) => {
+    linRef.current = newLin
+    setLin(newLin)
+    publishRef.current({
+      linear:  { x: -newLin.y * controlsRef.current.maxSpeed, y: -newLin.x * controlsRef.current.maxSpeed, z: 0 },
+      angular: { x: 0, y: 0, z: -rotRef.current.x * controlsRef.current.maxRot * Math.PI / 180 },
     })
-  }
+  }, [])
+
+  const updateRot = useCallback((newRot) => {
+    rotRef.current = newRot
+    setRot(newRot)
+    publishRef.current({
+      linear:  { x: -linRef.current.y * controlsRef.current.maxSpeed, y: -linRef.current.x * controlsRef.current.maxSpeed, z: 0 },
+      angular: { x: 0, y: 0, z: -newRot.x * controlsRef.current.maxRot * Math.PI / 180 },
+    })
+  }, [])
+
+  // Gamepad support via Gamepad API
+  const [gamepadName, setGamepadName] = useState(null)
+  const gamepadIndexRef = useRef(null)
+  const rafRef = useRef(null)
+
+  useEffect(() => {
+    const onConnect = (e) => {
+      gamepadIndexRef.current = e.gamepad.index
+      setGamepadName(e.gamepad.id || 'Gamepad')
+    }
+    const onDisconnect = (e) => {
+      if (gamepadIndexRef.current === e.gamepad.index) {
+        gamepadIndexRef.current = null
+        setGamepadName(null)
+        updateLin({ x: 0, y: 0 })
+        updateRot({ x: 0, y: 0 })
+      }
+    }
+    window.addEventListener('gamepadconnected', onConnect)
+    window.addEventListener('gamepaddisconnected', onDisconnect)
+    // ページリロード後など、既に接続済みのゲームパッドを検出
+    const existing = navigator.getGamepads ? [...navigator.getGamepads()].find(Boolean) : null
+    if (existing) { gamepadIndexRef.current = existing.index; setGamepadName(existing.id || 'Gamepad') }
+    return () => {
+      window.removeEventListener('gamepadconnected', onConnect)
+      window.removeEventListener('gamepaddisconnected', onDisconnect)
+    }
+  }, [updateLin, updateRot])
+
+  useEffect(() => {
+    if (!gamepadName) {
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+      return
+    }
+    // 左スティック: axis0=X, axis1=Y
+    // 右スティックX: standard mapping (Xbox等) → axis[2], 非standard (PS等) → axis[3] (axis[2]はL2トリガー)
+    let prev = [0, 0, 0]
+    const poll = () => {
+      const gp = (navigator.getGamepads?.() ?? [])[gamepadIndexRef.current]
+      if (gp) {
+        const rightXIdx = gp.mapping === 'standard' ? 2 : 3
+        const ax0 = applyDeadzone(gp.axes[0] ?? 0)
+        const ax1 = applyDeadzone(gp.axes[1] ?? 0)
+        const ax2 = applyDeadzone(gp.axes[rightXIdx] ?? 0)
+        if (ax0 !== prev[0] || ax1 !== prev[1]) updateLin({ x: ax0, y: -ax1 })
+        if (ax2 !== prev[2]) updateRot({ x: ax2, y: 0 })
+        prev = [ax0, ax1, ax2]
+      }
+      rafRef.current = requestAnimationFrame(poll)
+    }
+    rafRef.current = requestAnimationFrame(poll)
+    return () => { if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null } }
+  }, [gamepadName, updateLin, updateRot])
+
+  const gamepadLabel = gamepadName ? (gamepadName.split('(')[0].trim() || 'Gamepad') : null
 
   return (
     <>
@@ -138,10 +212,15 @@ function TeleopTab({ telemetry, controls, setControls }) {
         </div>
       </Section>
 
-      <Section title="仮想ジョイスティック" sub="ドラッグまたはタッチで操作">
+      <Section title="仮想ジョイスティック" sub="ドラッグ・タッチ・ゲームパッドで操作"
+        tools={gamepadLabel ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ok)", fontFamily: "var(--mono)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <I.joystick size={12} /> {gamepadLabel}
+          </div>
+        ) : null}>
         <div style={{ display: "flex", gap: 24, justifyContent: "space-around", flexWrap: "wrap", padding: "8px 0" }}>
-          <Joystick label="並進 (LIN)" onChange={handleLin} />
-          <Joystick label="回転 (ROT)" onChange={handleRot} />
+          <Joystick label="並進 (LIN)" onChange={updateLin} value={lin} />
+          <Joystick label="回転 (ROT)" onChange={updateRot} value={rot} />
         </div>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 10, fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)", flexWrap: "wrap" }}>
           <span>VX: <span style={{ color: "var(--ink)" }}>{(-lin.y * controls.maxSpeed).toFixed(2)} m/s</span></span>
@@ -149,6 +228,11 @@ function TeleopTab({ telemetry, controls, setControls }) {
           <span>ω: <span style={{ color: "var(--ink)" }}>{(-rot.x * controls.maxRot).toFixed(0)} °/s</span></span>
           <span style={{ color: "var(--ink-3)" }}>→ {cmdVelTopic}</span>
         </div>
+        {!gamepadName && (
+          <div style={{ marginTop: 8, textAlign: "center", fontSize: 10, color: "var(--ink-3)", fontFamily: "var(--mono)" }}>
+            ゲームパッドを接続すると自動認識されます (左スティック: 並進 / 右スティック: 回転)
+          </div>
+        )}
       </Section>
     </>
   )
