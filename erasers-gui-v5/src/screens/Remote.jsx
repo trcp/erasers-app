@@ -112,16 +112,16 @@ function TeleopTab({ telemetry, controls, setControls }) {
   const handleLin = (newLin) => {
     setLin(newLin)
     publish({
-      linear:  { x: newLin.y * controls.maxSpeed, y: newLin.x * controls.maxSpeed, z: 0 },
-      angular: { x: 0, y: 0, z: rot.x * controls.maxRot * Math.PI / 180 },
+      linear:  { x: -newLin.y * controls.maxSpeed, y: -newLin.x * controls.maxSpeed, z: 0 },
+      angular: { x: 0, y: 0, z: -rot.x * controls.maxRot * Math.PI / 180 },
     })
   }
 
   const handleRot = (newRot) => {
     setRot(newRot)
     publish({
-      linear:  { x: lin.y * controls.maxSpeed, y: lin.x * controls.maxSpeed, z: 0 },
-      angular: { x: 0, y: 0, z: newRot.x * controls.maxRot * Math.PI / 180 },
+      linear:  { x: -lin.y * controls.maxSpeed, y: -lin.x * controls.maxSpeed, z: 0 },
+      angular: { x: 0, y: 0, z: -newRot.x * controls.maxRot * Math.PI / 180 },
     })
   }
 
@@ -144,9 +144,9 @@ function TeleopTab({ telemetry, controls, setControls }) {
           <Joystick label="回転 (ROT)" onChange={handleRot} />
         </div>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 10, fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)", flexWrap: "wrap" }}>
-          <span>VX: <span style={{ color: "var(--ink)" }}>{(lin.y * controls.maxSpeed).toFixed(2)} m/s</span></span>
-          <span>VY: <span style={{ color: "var(--ink)" }}>{(lin.x * controls.maxSpeed).toFixed(2)} m/s</span></span>
-          <span>ω: <span style={{ color: "var(--ink)" }}>{(rot.x * controls.maxRot).toFixed(0)} °/s</span></span>
+          <span>VX: <span style={{ color: "var(--ink)" }}>{(-lin.y * controls.maxSpeed).toFixed(2)} m/s</span></span>
+          <span>VY: <span style={{ color: "var(--ink)" }}>{(-lin.x * controls.maxSpeed).toFixed(2)} m/s</span></span>
+          <span>ω: <span style={{ color: "var(--ink)" }}>{(-rot.x * controls.maxRot).toFixed(0)} °/s</span></span>
           <span style={{ color: "var(--ink-3)" }}>→ {cmdVelTopic}</span>
         </div>
       </Section>
