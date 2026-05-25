@@ -129,7 +129,7 @@ function TeleopTab({ telemetry, controls, setControls }) {
     linRef.current = newLin
     setLin(newLin)
     publishRef.current({
-      linear:  { x: -newLin.y * controlsRef.current.maxSpeed, y: -newLin.x * controlsRef.current.maxSpeed, z: 0 },
+      linear:  { x: newLin.y * controlsRef.current.maxSpeed, y: -newLin.x * controlsRef.current.maxSpeed, z: 0 },
       angular: { x: 0, y: 0, z: -rotRef.current.x * controlsRef.current.maxRot * Math.PI / 180 },
     })
   }, [])
@@ -138,7 +138,7 @@ function TeleopTab({ telemetry, controls, setControls }) {
     rotRef.current = newRot
     setRot(newRot)
     publishRef.current({
-      linear:  { x: -linRef.current.y * controlsRef.current.maxSpeed, y: -linRef.current.x * controlsRef.current.maxSpeed, z: 0 },
+      linear:  { x: linRef.current.y * controlsRef.current.maxSpeed, y: -linRef.current.x * controlsRef.current.maxSpeed, z: 0 },
       angular: { x: 0, y: 0, z: -newRot.x * controlsRef.current.maxRot * Math.PI / 180 },
     })
   }, [])
