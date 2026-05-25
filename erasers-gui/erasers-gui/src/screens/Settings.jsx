@@ -388,9 +388,26 @@ function ModeEditModal({ initial, onSave, onCancel }) {
   )
 }
 
+function isValidHost(v) {
+  if (!v) return false
+  const ipv4 = v.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (ipv4) return ipv4.slice(1).every(n => +n <= 255)
+  return /^[a-zA-Z0-9]([a-zA-Z0-9\-.]*[a-zA-Z0-9])?$/.test(v)
+}
+
+function isValidPort(v) {
+  const n = parseInt(v, 10)
+  return !isNaN(n) && n >= 1 && n <= 65535 && String(n) === v.trim()
+}
+
 export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, setPcs, activePc, setActivePc, robotType, setRobotType }) {
   const [host, setHost] = useState(rosbridge.host)
   const [port, setPort] = useState(rosbridge.port)
+
+  // ロボット種切り替えでコンテキストの rosbridge が更新されたらフォームも追従する
+  useEffect(() => { setHost(rosbridge.host) }, [rosbridge.host])
+  useEffect(() => { setPort(rosbridge.port) }, [rosbridge.port])
+
   const { ros, status } = useRos()
   const { checkPcStatus, robotPresets, setRobotPresets, activePreset, rosConfigs, loadRosConfig } = useAppContext()
   const connected = status === 'connected'
@@ -408,7 +425,15 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
       .catch(() => {})
   }, [connected])
 
-  const save = () => setRosbridge({ host, port, ssl: false })
+  const hostInvalid   = host !== '' && !isValidHost(host)
+  const portInvalid   = port !== '' && !isValidPort(port)
+
+  const save = () => {
+    if (!isValidHost(host) || !isValidPort(port)) return
+    setRosbridge({ host, port, ssl: false })
+    // 現在のロボット種のプリセットにも保存して、種別切り替え時に復元できるようにする
+    updatePreset(p => ({ ...p, rosbridge: { host, port } }))
+  }
   const url = `ws://${host}:${port}`
 
   const statusLabel = {
@@ -419,8 +444,10 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
   }[status] || { text: status, cls: "" }
 
   const [newPc, setNewPc] = useState({ name: "", host: "" })
+  const newPcHostInvalid = newPc.host !== '' && !isValidHost(newPc.host)
+
   const addPc = () => {
-    if (!newPc.name || !newPc.host) return
+    if (!newPc.name || !newPc.host || !isValidHost(newPc.host)) return
     const id = "pc-" + Date.now()
     const h = newPc.host
     setPcs(prev => {
@@ -614,7 +641,7 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
             const label = preset?.label ?? key
             const isLast = Object.keys(robotPresets).length === 1
             return (
-              <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              <div key={key}>
                 {renamingKey === key ? (
                   <div className="robot-type-card" style={{ alignItems: 'center', gap: 8 }}>
                     <span style={{ fontSize: 10, color: 'var(--ink-3)', fontFamily: 'var(--mono)', textTransform: 'uppercase', letterSpacing: '.06em' }}>名前を変更</span>
@@ -628,26 +655,24 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setRobotType(key)}
+                  <div onClick={() => setRobotType(key)}
                     className={`robot-type-card ${robotType === key ? "active" : ""}`}
-                    style={{ width: '100%' }}>
+                    style={{ width: '100%', cursor: 'pointer', position: 'relative' }}>
                     <I.joystick size={22} />
                     <div className="robot-type-label">{label}</div>
                     <div className="robot-type-modes mono">{count} モード</div>
-                  </button>
-                )}
-                {renamingKey !== key && (
-                  <div style={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
-                    <button className="icon-btn" style={{ width: 24, height: 24 }} title="名前を変更"
-                      onClick={() => startRename(key, label)}>
-                      <I.settings size={10} />
-                    </button>
-                    {!isLast && (
-                      <button className="icon-btn" style={{ width: 24, height: 24 }} title="削除"
-                        onClick={() => removeRobotType(key)}>
-                        <I.trash size={10} />
+                    <div style={{ position: 'absolute', top: 4, right: 4, display: 'flex', gap: 2 }}>
+                      <button className="icon-btn" style={{ width: 22, height: 22 }} title="名前を変更"
+                        onClick={e => { e.stopPropagation(); startRename(key, label) }}>
+                        <I.settings size={10} />
                       </button>
-                    )}
+                      {!isLast && (
+                        <button className="icon-btn" style={{ width: 22, height: 22 }} title="削除"
+                          onClick={e => { e.stopPropagation(); removeRobotType(key) }}>
+                          <I.trash size={10} />
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -670,15 +695,23 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         </div>
       </Section>
 
-      <Section title="rosbridge 接続" sub="WEBSOCKET ENDPOINT" tools={<button className="btn primary sm" onClick={save}><I.check size={12} /> 設定</button>}>
-        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, alignItems: "end" }} className="rosbridge-form">
+      <Section title="rosbridge 接続" sub="WEBSOCKET ENDPOINT" tools={
+        <button className="btn primary sm" onClick={save} disabled={!host || hostInvalid || !port || portInvalid}>
+          <I.check size={12} /> 設定
+        </button>
+      }>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10, alignItems: "start" }} className="rosbridge-form">
           <label style={{ display: "grid", gap: 4 }}>
             <span className="form-label">ホスト / IPアドレス</span>
-            <input className="input mono" value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.10" />
+            <input className="input mono" value={host} onChange={e => setHost(e.target.value)} placeholder="192.168.1.10"
+              style={hostInvalid ? { borderColor: "var(--danger, #e53e3e)" } : undefined} />
+            {hostInvalid && <span style={{ fontSize: 11, color: "var(--danger, #e53e3e)", fontFamily: "var(--mono)" }}>無効なホスト / IPアドレスです</span>}
           </label>
           <label style={{ display: "grid", gap: 4 }}>
             <span className="form-label">ポート</span>
-            <input className="input mono" value={port} onChange={e => setPort(e.target.value)} placeholder="9090" />
+            <input className="input mono" value={port} onChange={e => setPort(e.target.value)} placeholder="9090"
+              style={portInvalid ? { borderColor: "var(--danger, #e53e3e)" } : undefined} />
+            {portInvalid && <span style={{ fontSize: 11, color: "var(--danger, #e53e3e)", fontFamily: "var(--mono)" }}>1–65535</span>}
           </label>
         </div>
         <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--surface-2)", borderRadius: 6, border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
@@ -690,7 +723,7 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
           </span>
         </div>
         <div style={{ marginTop: 10, fontSize: 11, color: "var(--ink-3)", fontFamily: "var(--mono)" }}>
-          ※ サーバ側で <code>ros2 launch rosbridge_server rosbridge_websocket_launch.xml</code> を起動してください
+          ※ 「設定」を押すと現在のロボット種に紐づけて保存されます。ロボットの種類を切り替えると自動的に接続先が更新されます
         </div>
       </Section>
 
@@ -720,10 +753,17 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         </div>
         <div style={{ borderTop: "1px solid var(--border)", paddingTop: 10 }}>
           <div className="form-label" style={{ marginBottom: 8 }}>新規PC追加</div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8 }} className="pc-add-form">
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, alignItems: "start" }} className="pc-add-form">
             <input className="input" placeholder="名前 (例: robot-pc-01)" value={newPc.name} onChange={e => setNewPc(p => ({ ...p, name: e.target.value }))} />
-            <input className="input mono" placeholder="192.168.1.20" value={newPc.host} onChange={e => setNewPc(p => ({ ...p, host: e.target.value }))} />
-            <button className="btn primary" onClick={addPc}><I.plus size={14} /> 追加</button>
+            <div style={{ display: "grid", gap: 4 }}>
+              <input className="input mono" placeholder="192.168.1.20" value={newPc.host}
+                onChange={e => setNewPc(p => ({ ...p, host: e.target.value }))}
+                style={newPcHostInvalid ? { borderColor: "var(--danger, #e53e3e)" } : undefined} />
+              {newPcHostInvalid && <span style={{ fontSize: 11, color: "var(--danger, #e53e3e)", fontFamily: "var(--mono)" }}>無効なホスト / IPアドレスです</span>}
+            </div>
+            <button className="btn primary" onClick={addPc} disabled={!newPc.name || !newPc.host || newPcHostInvalid}>
+              <I.plus size={14} /> 追加
+            </button>
           </div>
         </div>
       </Section>

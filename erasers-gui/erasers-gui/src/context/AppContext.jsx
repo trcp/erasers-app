@@ -88,6 +88,21 @@ export function AppProvider({ children }) {
   const pcsRef = useRef(pcs)
   useEffect(() => { pcsRef.current = pcs }, [pcs])
 
+  const robotPresetsRef = useRef(robotPresets)
+  useEffect(() => { robotPresetsRef.current = robotPresets }, [robotPresets])
+
+  // ロボットの種類を切り替えたとき、プリセットに rosbridge が設定されていれば自動更新
+  useEffect(() => {
+    const preset = robotPresetsRef.current[tweaks.robotType]
+    if (preset?.rosbridge?.host) {
+      setRosbridge(prev => ({
+        ...prev,
+        host: preset.rosbridge.host,
+        port: preset.rosbridge.port ?? prev.port,
+      }))
+    }
+  }, [tweaks.robotType])
+
   const [rosConfigs, setRosConfigs] = useState({})
   const prevOnlineRef = useRef({})
 

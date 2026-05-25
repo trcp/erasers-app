@@ -29,7 +29,13 @@ export function RosProvider({ config, children }) {
     const gen = ++genRef.current
     const url = `${cfg.ssl ? 'wss' : 'ws'}://${cfg.host}:${cfg.port}`
     setStatus('connecting')
-    const ros = new ROSLIB.Ros({ url })
+    let ros
+    try {
+      ros = new ROSLIB.Ros({ url })
+    } catch {
+      setStatus('error')
+      return
+    }
     ros.on('connection', () => {
       if (gen !== genRef.current) return
       setStatus('connected')

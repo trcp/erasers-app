@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import I from '../icons.jsx'
 import { useAppContext } from '../context/AppContext'
 import { getServerUrl, fetchTasks, runTask, killTask, getTaskStatus } from '../services/erasersApi.js'
@@ -16,6 +16,83 @@ function Section({ title, sub, tools, children, style }) {
   )
 }
 
+// CSIシーケンス・単体ESCコードを除去し、\r\n を正規化する
+function stripAnsi(str) {
+  return str
+    .replace(/\x1b\[[\x30-\x3f]*[\x20-\x2f]*[\x40-\x7e]/g, '') // CSI sequences
+    .replace(/\x1b[^\x5b]/g, '')                                  // ESC + single char
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+}
+
+function ProcessLog({ pc, runningItem, onClose }) {
+  const [lines, setLines] = useState([])
+  const [status, setStatus] = useState('connecting')
+  const bottomRef = useRef(null)
+
+  useEffect(() => {
+    const ws = new WebSocket(`ws://${pc.host}:3001/ws/${runningItem.taskName}/${runningItem.nodeName}`)
+    ws.onopen = () => setStatus('connected')
+    ws.onmessage = (e) => {
+      const cleaned = stripAnsi(e.data).trimEnd()
+      if (cleaned) setLines(prev => [...prev, ...cleaned.split('\n')])
+    }
+    ws.onclose = () => setStatus(s => s === 'connecting' ? 'error' : 'ended')
+    ws.onerror = () => setStatus('error')
+    return () => ws.close()
+  }, [pc.host, runningItem.taskName, runningItem.nodeName])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'instant' })
+  }, [lines])
+
+  const statusLabel = {
+    connecting: '接続中...',
+    connected:  '実行中',
+    ended:      '終了',
+    error:      '接続エラー',
+  }[status]
+
+  const statusColor = {
+    connecting: 'var(--ink-3)',
+    connected:  'var(--accent)',
+    ended:      'var(--ink-3)',
+    error:      'var(--danger, #e53e3e)',
+  }[status]
+
+  return (
+    <Section
+      title={`ログ · ${runningItem.taskDisplayName} / ${runningItem.displayName}`}
+      sub={<span style={{ color: statusColor }}>{statusLabel}</span>}
+      tools={
+        <button className="btn sm" onClick={onClose}>
+          <I.x size={11} /> 閉じる
+        </button>
+      }
+    >
+      <div style={{
+        fontFamily: "var(--mono)", fontSize: 11,
+        background: "#0d1117", color: "#c9d1d9",
+        borderRadius: 6, padding: "12px 14px",
+        height: 320, overflowY: "auto",
+        whiteSpace: "pre-wrap", wordBreak: "break-all",
+        lineHeight: 1.7,
+      }}>
+        {lines.length === 0 ? (
+          <span style={{ color: "#6e7681" }}>
+            {status === 'error'      ? '接続に失敗しました' :
+             status === 'ended'      ? 'プロセスは実行されていません' :
+                                       '出力待機中...'}
+          </span>
+        ) : (
+          lines.map((line, i) => <div key={i}>{line}</div>)
+        )}
+        <div ref={bottomRef} />
+      </div>
+    </Section>
+  )
+}
+
 export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActivePc }) {
   const { screen, rosConfigs } = useAppContext()
   const [serverTasks, setServerTasks] = useState([])
@@ -24,11 +101,14 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
   const [filter, setFilter]           = useState("all")
   const [selectedId, setSelectedId]   = useState(null)
   const [launching, setLaunching]     = useState(false)
+  const [stopping, setStopping]       = useState(false)
   const [editedTemplates, setEditedTemplates] = useState({})
   const [editingTemplate, setEditingTemplate] = useState(false)
   const [selectedCommandKeys, setSelectedCommandKeys] = useState({})
+  const [logTarget, setLogTarget]     = useState(null)
 
   useEffect(() => { setEditingTemplate(false) }, [selectedId])
+  useEffect(() => { setLogTarget(null) }, [activePc])
 
   const getCommandKey = (program) =>
     selectedCommandKeys[program.id] || program.defaultCommandKey
@@ -45,11 +125,41 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
     setLoading(true)
     setError(null)
     setServerTasks([])
-    fetchTasks(getServerUrl(pc))
-      .then(tasks => {
+    const baseUrl = getServerUrl(pc)
+    fetchTasks(baseUrl)
+      .then(async tasks => {
         setServerTasks(tasks)
         setSelectedId(tasks[0]?.id ?? null)
         setFilter(tasks[0]?.taskName ?? "")
+
+        // サーバ側で実行中のプロセスを確認して runningTasks を復元する
+        const alreadyTracked = new Set((runningTasks[activePc] || []).map(r => r.id))
+        const recovered = []
+        for (const task of tasks) {
+          if (alreadyTracked.has(task.id)) continue
+          try {
+            const { is_running } = await getTaskStatus(baseUrl, task.taskName, task.nodeName)
+            if (is_running) {
+              recovered.push({
+                id: task.id,
+                taskName: task.taskName,
+                nodeName: task.nodeName,
+                displayName: task.displayName,
+                taskDisplayName: task.taskDisplayName,
+                startedAt: new Date(),
+              })
+            }
+          } catch { /* 通信エラーは無視 */ }
+        }
+        if (recovered.length > 0) {
+          setRunningTasks(prev => {
+            const existing = prev[activePc] || []
+            const existingIds = new Set(existing.map(r => r.id))
+            const newOnes = recovered.filter(r => !existingIds.has(r.id))
+            if (newOnes.length === 0) return prev
+            return { ...prev, [activePc]: [...existing, ...newOnes] }
+          })
+        }
       })
       .catch(err => setError(err.message))
       .finally(() => setLoading(false))
@@ -83,6 +193,8 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
   const selected  = serverTasks.find(p => p.id === selectedId)
   const runningOnPc = runningTasks[activePc] || []
   const isRunning = (id) => runningOnPc.some(r => r.id === id)
+
+  const activePc_ = pcs.find(p => p.id === activePc)
 
   const launch = async (program) => {
     const pc = pcs.find(p => p.id === activePc)
@@ -119,6 +231,16 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
       await launch(p).catch(() => {})
     }
     setLaunching(false)
+  }
+
+  const stopAll = async () => {
+    const toStop = filtered.filter(p => isRunning(p.id)).map(p => runningOnPc.find(r => r.id === p.id))
+    if (toStop.length === 0) return
+    setStopping(true)
+    for (const r of toStop) {
+      await stop(r).catch(() => {})
+    }
+    setStopping(false)
   }
 
   const stop = async (runningItem) => {
@@ -202,14 +324,24 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
 
       <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) minmax(280px, 360px)", gap: 14 }} className="task-grid">
         <Section title="起動可能プログラム" tools={
-          <button
-            className="btn primary sm"
-            disabled={launching || filtered.length === 0 || filtered.every(p => isRunning(p.id))}
-            onClick={launchAll}
-          >
-            <I.rocket size={11} />
-            {launching ? "起動中..." : `一括起動 (${filtered.filter(p => !isRunning(p.id)).length}件)`}
-          </button>
+          <>
+            <button
+              className="btn danger sm"
+              disabled={stopping || filtered.every(p => !isRunning(p.id))}
+              onClick={stopAll}
+            >
+              <I.stop size={11} />
+              {stopping ? "停止中..." : `一括停止 (${filtered.filter(p => isRunning(p.id)).length}件)`}
+            </button>
+            <button
+              className="btn primary sm"
+              disabled={launching || filtered.length === 0 || filtered.every(p => isRunning(p.id))}
+              onClick={launchAll}
+            >
+              <I.rocket size={11} />
+              {launching ? "起動中..." : `一括起動 (${filtered.filter(p => !isRunning(p.id)).length}件)`}
+            </button>
+          </>
         }>
           {taskNames.length > 0 && (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--border)" }}>
@@ -265,9 +397,14 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
                       <div className="program-desc">{p.description}</div>
                     </div>
                     {running ? (
-                      <button className="btn danger sm" onClick={(e) => { e.stopPropagation(); stop(runItem) }}>
-                        <I.stop size={11} /> 停止
-                      </button>
+                      <>
+                        <button className="btn sm" onClick={(e) => { e.stopPropagation(); setLogTarget(runItem) }}>
+                          <I.terminal size={11} /> ログ
+                        </button>
+                        <button className="btn danger sm" onClick={(e) => { e.stopPropagation(); stop(runItem) }}>
+                          <I.stop size={11} /> 停止
+                        </button>
+                      </>
                     ) : (
                       <button className="btn primary sm" onClick={(e) => { e.stopPropagation(); launch(p) }}>
                         <I.play size={11} /> 起動
@@ -365,13 +502,18 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
               <div>
                 <div className="detail-label">対象 PC</div>
                 <div className="mono" style={{ fontSize: 12 }}>
-                  {pcs.find(p => p.id === activePc)?.name} ({pcs.find(p => p.id === activePc)?.host})
+                  {activePc_?.name} ({activePc_?.host})
                 </div>
               </div>
               {isRunning(selected.id) ? (
-                <button className="btn danger" onClick={() => stop(runningOnPc.find(r => r.id === selected.id))}>
-                  <I.stop size={14} /> このプログラムを停止
-                </button>
+                <div style={{ display: "grid", gap: 6 }}>
+                  <button className="btn sm" onClick={() => setLogTarget(runningOnPc.find(r => r.id === selected.id))}>
+                    <I.terminal size={14} /> ログを表示
+                  </button>
+                  <button className="btn danger" onClick={() => stop(runningOnPc.find(r => r.id === selected.id))}>
+                    <I.stop size={14} /> このプログラムを停止
+                  </button>
+                </div>
               ) : (
                 <button className="btn primary" onClick={() => launch(selected)}>
                   <I.rocket size={14} /> このプログラムを起動
@@ -383,21 +525,36 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
       </div>
 
       {runningOnPc.length > 0 && (
-        <Section title={`実行中プロセス · ${pcs.find(p => p.id === activePc)?.name}`} sub={`${runningOnPc.length} ACTIVE`}>
+        <Section title={`実行中プロセス · ${activePc_?.name}`} sub={`${runningOnPc.length} ACTIVE`}>
           <div style={{ display: "grid", gap: 4 }}>
             {runningOnPc.map(r => (
               <div key={r.id} style={{
-                display: "grid", gridTemplateColumns: "auto 1fr auto auto", alignItems: "center", gap: 10,
-                padding: "8px 12px", border: "1px solid var(--border)", borderRadius: 6, background: "var(--surface-2)",
+                display: "grid", gridTemplateColumns: "auto 1fr auto auto auto", alignItems: "center", gap: 10,
+                padding: "8px 12px", border: `1px solid ${logTarget?.id === r.id ? "var(--accent)" : "var(--border)"}`,
+                borderRadius: 6, background: "var(--surface-2)",
               }}>
                 <span className="dot-pulse" />
                 <span className="mono" style={{ fontSize: 12 }}>{r.taskDisplayName} / {r.displayName}</span>
                 <span className="mono" style={{ fontSize: 10, color: "var(--ink-3)" }}>{Math.floor((Date.now() - new Date(r.startedAt)) / 1000)}s</span>
+                <button
+                  className={`btn sm${logTarget?.id === r.id ? " primary" : ""}`}
+                  onClick={() => setLogTarget(prev => prev?.id === r.id ? null : r)}
+                >
+                  <I.terminal size={11} /> ログ
+                </button>
                 <button className="btn danger sm" onClick={() => stop(r)}><I.stop size={11} /> 停止</button>
               </div>
             ))}
           </div>
         </Section>
+      )}
+
+      {logTarget && activePc_ && (
+        <ProcessLog
+          pc={activePc_}
+          runningItem={logTarget}
+          onClose={() => setLogTarget(null)}
+        />
       )}
     </div>
   )
