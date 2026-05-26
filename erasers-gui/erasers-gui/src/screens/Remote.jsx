@@ -104,20 +104,14 @@ function SliderRow({ label, value, min, max, step, unit, onChange }) {
   )
 }
 
-const GAMEPAD_DEADZONE = 0.08
-function applyDeadzone(v) {
-  return Math.abs(v) < GAMEPAD_DEADZONE ? 0 : (v - Math.sign(v) * GAMEPAD_DEADZONE) / (1 - GAMEPAD_DEADZONE)
-}
-
 function TeleopTab({ telemetry, controls, setControls }) {
-  const { activePreset } = useAppContext()
+  const { activePreset, gamepadName, gamepadJoy, gamepadLbPressed } = useAppContext()
   const cmdVelTopic   = activePreset?.cmdVel?.topic   ?? '/cmd_vel'
   const cmdVelMsgType = activePreset?.cmdVel?.msgType ?? 'geometry_msgs/Twist'
   const [lin, setLin] = useState({ x: 0, y: 0 })
   const [rot, setRot] = useState({ x: 0, y: 0 })
   const { publish } = useRosTopic(cmdVelTopic, cmdVelMsgType, 'publish')
 
-  // Refs to avoid stale closures in RAF/gamepad polling
   const linRef = useRef({ x: 0, y: 0 })
   const rotRef = useRef({ x: 0, y: 0 })
   const controlsRef = useRef(controls)
@@ -144,7 +138,7 @@ function TeleopTab({ telemetry, controls, setControls }) {
     publishCurrent()
   }, [publishCurrent])
 
-  // 非ゼロの間は 20Hz でパブリッシュし続ける
+  // 仮想ジョイスティック: 非ゼロの間は 20Hz でパブリッシュし続ける
   useEffect(() => {
     const id = setInterval(() => {
       const { x: lx, y: ly } = linRef.current
@@ -153,60 +147,6 @@ function TeleopTab({ telemetry, controls, setControls }) {
     }, 50)
     return () => clearInterval(id)
   }, [publishCurrent])
-
-  // Gamepad support via Gamepad API
-  const [gamepadName, setGamepadName] = useState(null)
-  const gamepadIndexRef = useRef(null)
-  const rafRef = useRef(null)
-
-  useEffect(() => {
-    const onConnect = (e) => {
-      gamepadIndexRef.current = e.gamepad.index
-      setGamepadName(e.gamepad.id || 'Gamepad')
-    }
-    const onDisconnect = (e) => {
-      if (gamepadIndexRef.current === e.gamepad.index) {
-        gamepadIndexRef.current = null
-        setGamepadName(null)
-        updateLin({ x: 0, y: 0 })
-        updateRot({ x: 0, y: 0 })
-      }
-    }
-    window.addEventListener('gamepadconnected', onConnect)
-    window.addEventListener('gamepaddisconnected', onDisconnect)
-    // ページリロード後など、既に接続済みのゲームパッドを検出
-    const existing = navigator.getGamepads ? [...navigator.getGamepads()].find(Boolean) : null
-    if (existing) { gamepadIndexRef.current = existing.index; setGamepadName(existing.id || 'Gamepad') }
-    return () => {
-      window.removeEventListener('gamepadconnected', onConnect)
-      window.removeEventListener('gamepaddisconnected', onDisconnect)
-    }
-  }, [updateLin, updateRot])
-
-  useEffect(() => {
-    if (!gamepadName) {
-      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
-      return
-    }
-    // 左スティック: axis0=X, axis1=Y
-    // 右スティックX: standard mapping (Xbox等) → axis[2], 非standard (PS等) → axis[3] (axis[2]はL2トリガー)
-    let prev = [0, 0, 0]
-    const poll = () => {
-      const gp = (navigator.getGamepads?.() ?? [])[gamepadIndexRef.current]
-      if (gp) {
-        const rightXIdx = gp.mapping === 'standard' ? 2 : 3
-        const ax0 = applyDeadzone(gp.axes[0] ?? 0)
-        const ax1 = applyDeadzone(gp.axes[1] ?? 0)
-        const ax2 = applyDeadzone(gp.axes[rightXIdx] ?? 0)
-        if (ax0 !== prev[0] || ax1 !== prev[1]) updateLin({ x: ax0, y: -ax1 })
-        if (ax2 !== prev[2]) updateRot({ x: ax2, y: 0 })
-        prev = [ax0, ax1, ax2]
-      }
-      rafRef.current = requestAnimationFrame(poll)
-    }
-    rafRef.current = requestAnimationFrame(poll)
-    return () => { if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null } }
-  }, [gamepadName, updateLin, updateRot])
 
   const gamepadLabel = gamepadName ? (gamepadName.split('(')[0].trim() || 'Gamepad') : null
 
@@ -225,18 +165,27 @@ function TeleopTab({ telemetry, controls, setControls }) {
 
       <Section title="仮想ジョイスティック" sub="ドラッグ・タッチ・ゲームパッドで操作"
         tools={gamepadLabel ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--ok)", fontFamily: "var(--mono)", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            <I.joystick size={12} /> {gamepadLabel}
+          <div style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: "var(--mono)",
+            color: gamepadLbPressed ? "var(--ok)" : "var(--warn)",
+            maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <I.joystick size={12} />
+            {gamepadLabel}
+            <span style={{ marginLeft: 4, opacity: 0.8 }}>{gamepadLbPressed ? "· LB ON" : "· LB OFF"}</span>
           </div>
         ) : null}>
         <div style={{ display: "flex", gap: 24, justifyContent: "space-around", flexWrap: "wrap", padding: "8px 0" }}>
-          <Joystick label="並進 (LIN)" onChange={updateLin} value={lin} />
-          <Joystick label="回転 (ROT)" onChange={updateRot} value={rot} />
+          <Joystick label="並進 (LIN)" onChange={updateLin} value={gamepadName ? gamepadJoy.lin : lin} />
+          <Joystick label="回転 (ROT)" onChange={updateRot} value={gamepadName ? gamepadJoy.rot : rot} />
         </div>
         <div style={{ display: "flex", gap: 14, justifyContent: "center", marginTop: 10, fontFamily: "var(--mono)", fontSize: 11, color: "var(--ink-3)", flexWrap: "wrap" }}>
           <span style={{ color: "var(--ink-3)" }}>→ {cmdVelTopic}</span>
         </div>
-        {!gamepadName && (
+        {gamepadName ? (
+          <div style={{ marginTop: 8, textAlign: "center", fontSize: 10, fontFamily: "var(--mono)",
+            color: gamepadLbPressed ? "var(--ok)" : "var(--warn)" }}>
+            {gamepadLbPressed ? "● LB 押下中 · 操作有効" : "○ LB を押している間だけ操作できます (左スティック: 並進 / 右スティック: 回転)"}
+          </div>
+        ) : (
           <div style={{ marginTop: 8, textAlign: "center", fontSize: 10, color: "var(--ink-3)", fontFamily: "var(--mono)" }}>
             ゲームパッドを接続すると自動認識されます (左スティック: 並進 / 右スティック: 回転)
           </div>

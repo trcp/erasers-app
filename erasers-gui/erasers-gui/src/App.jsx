@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { AppProvider, useAppContext } from './context/AppContext'
 import { RosProvider, useRos } from './context/RosContext'
 import { useRosTopic } from './hooks/useRosTopic'
@@ -146,6 +146,131 @@ function TweaksContent() {
   )
 }
 
+const GAMEPAD_DEADZONE = 0.08
+function applyDeadzone(v) {
+  return Math.abs(v) < GAMEPAD_DEADZONE ? 0 : (v - Math.sign(v) * GAMEPAD_DEADZONE) / (1 - GAMEPAD_DEADZONE)
+}
+
+function GlobalGamepad() {
+  const { activePreset, controls, setGamepadName, setGamepadJoy, setGamepadLbPressed } = useAppContext()
+  const cmdVelTopic   = activePreset?.cmdVel?.topic   ?? '/cmd_vel'
+  const cmdVelMsgType = activePreset?.cmdVel?.msgType ?? 'geometry_msgs/Twist'
+  const { publish } = useRosTopic(cmdVelTopic, cmdVelMsgType, 'publish')
+
+  const gamepadIndexRef = useRef(null)
+  const gamepadNameRef  = useRef(null)
+  const rafRef          = useRef(null)
+  const linRef          = useRef({ x: 0, y: 0 })
+  const rotRef          = useRef({ x: 0, y: 0 })
+  const controlsRef     = useRef(controls)
+  const publishRef      = useRef(publish)
+  useEffect(() => { controlsRef.current = controls }, [controls])
+  useEffect(() => { publishRef.current = publish }, [publish])
+
+  const publishCurrent = useCallback(() => {
+    publishRef.current({
+      linear:  { x: linRef.current.y * controlsRef.current.maxSpeed, y: -linRef.current.x * controlsRef.current.maxSpeed, z: 0 },
+      angular: { x: 0, y: 0, z: -rotRef.current.x * controlsRef.current.maxRot * Math.PI / 180 },
+    })
+  }, [])
+
+  useEffect(() => {
+    const onConnect = (e) => {
+      gamepadIndexRef.current = e.gamepad.index
+      gamepadNameRef.current  = e.gamepad.id || 'Gamepad'
+      setGamepadName(gamepadNameRef.current)
+    }
+    const onDisconnect = (e) => {
+      if (gamepadIndexRef.current === e.gamepad.index) {
+        gamepadIndexRef.current = null
+        gamepadNameRef.current  = null
+        linRef.current = { x: 0, y: 0 }
+        rotRef.current = { x: 0, y: 0 }
+        setGamepadName(null)
+        setGamepadJoy({ lin: { x: 0, y: 0 }, rot: { x: 0, y: 0 } })
+        setGamepadLbPressed(false)
+        publishRef.current({ linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } })
+      }
+    }
+    window.addEventListener('gamepadconnected', onConnect)
+    window.addEventListener('gamepaddisconnected', onDisconnect)
+    const existing = navigator.getGamepads ? [...navigator.getGamepads()].find(Boolean) : null
+    if (existing) {
+      gamepadIndexRef.current = existing.index
+      gamepadNameRef.current  = existing.id || 'Gamepad'
+      setGamepadName(gamepadNameRef.current)
+    }
+    return () => {
+      window.removeEventListener('gamepadconnected', onConnect)
+      window.removeEventListener('gamepaddisconnected', onDisconnect)
+    }
+  }, [setGamepadName, setGamepadJoy, setGamepadLbPressed])
+
+  useEffect(() => {
+    const startPoll = () => {
+      let prev = [0, 0, 0]
+      let prevLb = false
+      const poll = () => {
+        if (gamepadIndexRef.current == null) { rafRef.current = null; return }
+        const gp = (navigator.getGamepads?.() ?? [])[gamepadIndexRef.current]
+        if (gp) {
+          const lb = gp.buttons[4]?.pressed ?? false
+          if (lb !== prevLb) setGamepadLbPressed(lb)
+
+          if (lb) {
+            const rightXIdx = gp.mapping === 'standard' ? 2 : 3
+            const ax0 = applyDeadzone(gp.axes[0] ?? 0)
+            const ax1 = applyDeadzone(gp.axes[1] ?? 0)
+            const ax2 = applyDeadzone(gp.axes[rightXIdx] ?? 0)
+            if (ax0 !== prev[0] || ax1 !== prev[1]) {
+              linRef.current = { x: ax0, y: -ax1 }
+              setGamepadJoy(j => ({ ...j, lin: { x: ax0, y: -ax1 } }))
+            }
+            if (ax2 !== prev[2]) {
+              rotRef.current = { x: ax2, y: 0 }
+              setGamepadJoy(j => ({ ...j, rot: { x: ax2, y: 0 } }))
+            }
+            if (ax0 !== prev[0] || ax1 !== prev[1] || ax2 !== prev[2]) publishCurrent()
+            prev = [ax0, ax1, ax2]
+          } else {
+            // LB を離したらロボットを停止
+            if (prevLb || linRef.current.x !== 0 || linRef.current.y !== 0 || rotRef.current.x !== 0) {
+              linRef.current = { x: 0, y: 0 }
+              rotRef.current = { x: 0, y: 0 }
+              setGamepadJoy({ lin: { x: 0, y: 0 }, rot: { x: 0, y: 0 } })
+              publishRef.current({ linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } })
+            }
+            prev = [0, 0, 0]
+          }
+          prevLb = lb
+        }
+        rafRef.current = requestAnimationFrame(poll)
+      }
+      rafRef.current = requestAnimationFrame(poll)
+    }
+
+    const onConnect = () => { if (!rafRef.current) startPoll() }
+    window.addEventListener('gamepadconnected', onConnect)
+    if (gamepadIndexRef.current != null && !rafRef.current) startPoll()
+    return () => {
+      window.removeEventListener('gamepadconnected', onConnect)
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null }
+    }
+  }, [publishCurrent, setGamepadJoy, setGamepadLbPressed])
+
+  // 非ゼロの間は 20Hz でパブリッシュし続ける
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { x: lx, y: ly } = linRef.current
+      const { x: rx }        = rotRef.current
+      if (lx !== 0 || ly !== 0 || rx !== 0) publishCurrent()
+    }, 50)
+    return () => clearInterval(id)
+  }, [publishCurrent])
+
+  return null
+}
+
 function RosSync() {
   const { setTelemetry, setUtterances, setOverlayUtterance, screen, activePreset } = useAppContext()
   const screenRef = useRef(screen)
@@ -239,6 +364,7 @@ function AppShell() {
   return (
     <>
       <RosSync />
+      <GlobalGamepad />
       <div className="shell" data-screen={screen}>
         <TopBar onMenu={() => setMenuOpen(true)} />
         <main className="main" data-screen={screen}>{body}</main>

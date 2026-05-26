@@ -175,6 +175,10 @@ export function AppProvider({ children }) {
 
   const [runningTasks, setRunningTasks] = useState({})
 
+  const [gamepadName, setGamepadName] = useState(null)
+  const [gamepadJoy, setGamepadJoy] = useState({ lin: { x: 0, y: 0 }, rot: { x: 0, y: 0 } })
+  const [gamepadLbPressed, setGamepadLbPressed] = useState(false)
+
   const [allTopics, setAllTopics] = useState(() => {
     try {
       const stored = JSON.parse(localStorage.getItem('erasers.topics'))
@@ -219,6 +223,9 @@ export function AppProvider({ children }) {
     topics, setTopics,
     robotPresets, setRobotPresets,
     activePreset,
+    gamepadName, setGamepadName,
+    gamepadJoy, setGamepadJoy,
+    gamepadLbPressed, setGamepadLbPressed,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
