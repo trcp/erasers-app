@@ -8,7 +8,7 @@ const AppContext = createContext(null)
 const TWEAK_DEFAULTS = {
   accent:    "#2871d9",
   density:   "comfortable",
-  robotType: "AMR",
+  robotType: localStorage.getItem('erasers.robotType') || "AMR",
 }
 
 const DEFAULT_CONTROLS = { maxSpeed: 1.2, maxRot: 90, accel: 1.0 }
@@ -162,6 +162,13 @@ export function AppProvider({ children }) {
   useEffect(() => { localStorage.setItem('erasers.rosbridge', JSON.stringify(rosbridge)) }, [rosbridge])
   useEffect(() => { localStorage.setItem('erasers.robotPresets', JSON.stringify(robotPresets)) }, [robotPresets])
   useEffect(() => { localStorage.setItem('erasers.controls', JSON.stringify(allControls)) }, [allControls])
+  useEffect(() => { localStorage.setItem('erasers.robotType', tweaks.robotType) }, [tweaks.robotType])
+  useEffect(() => {
+    const keys = Object.keys(robotPresets)
+    if (keys.length > 0 && !robotPresets[tweaks.robotType]) {
+      setTweak('robotType', keys[0])
+    }
+  }, [robotPresets, tweaks.robotType])
   useEffect(() => {
     if (activePc) localStorage.setItem('erasers.activePc', activePc)
   }, [activePc])
