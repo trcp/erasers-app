@@ -499,6 +499,8 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         speech:  { topic: '/robot/speech',  msgType: 'std_msgs/String' },
         battery: { topic: '/battery_state', msgType: 'sensor_msgs/BatteryState' },
         cmdVel:  { topic: '/cmd_vel',       msgType: 'geometry_msgs/Twist' },
+        map:       { topic: '/map',           msgType: 'nav_msgs/OccupancyGrid' },
+        robotPose: { topic: '/amcl_pose',    msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
         modeGroups: [],
       },
     }))
@@ -553,6 +555,14 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
 
   const updateCmdVel = (field, value) => {
     updatePreset(p => ({ ...p, cmdVel: { ...p.cmdVel, [field]: value } }))
+  }
+
+  const updateMap = (field, value) => {
+    updatePreset(p => ({ ...p, map: { ...p.map, [field]: value } }))
+  }
+
+  const updateRobotPose = (field, value) => {
+    updatePreset(p => ({ ...p, robotPose: { ...p.robotPose, [field]: value } }))
   }
 
   const handleTopicChange = (updater, value) => {
@@ -771,6 +781,32 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
             <button className="btn sm" onClick={resetToDefault} title="公開プリセットファイルからリセット">
               <I.refresh size={12} /> デフォルト
             </button>
+          </div>
+        </SubSection>
+
+        <SubSection label="マップ · 受信トピック">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">トピック</span>
+              <input className="input mono" list="preset-topic-names" value={activePreset?.map?.topic ?? ''} onChange={e => handleTopicChange(updateMap, e.target.value)} placeholder="/map" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">メッセージ型</span>
+              <input className="input mono" value={activePreset?.map?.msgType ?? ''} onChange={e => updateMap('msgType', e.target.value)} placeholder="nav_msgs/OccupancyGrid" />
+            </label>
+          </div>
+        </SubSection>
+
+        <SubSection label="ロボット自己位置 · トピック">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">トピック</span>
+              <input className="input mono" list="preset-topic-names" value={activePreset?.robotPose?.topic ?? ''} onChange={e => handleTopicChange(updateRobotPose, e.target.value)} placeholder="/amcl_pose" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">メッセージ型</span>
+              <input className="input mono" value={activePreset?.robotPose?.msgType ?? ''} onChange={e => updateRobotPose('msgType', e.target.value)} placeholder="geometry_msgs/PoseWithCovarianceStamped" />
+            </label>
           </div>
         </SubSection>
 

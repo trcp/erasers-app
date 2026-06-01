@@ -6,6 +6,8 @@ export const defaultPresets = {
     speech:  { topic: "/robot/speech",  msgType: "std_msgs/String" },
     battery: { topic: "/battery_state", msgType: "sensor_msgs/BatteryState" },
     cmdVel:  { topic: "/cmd_vel",        msgType: "geometry_msgs/Twist" },
+    map:       { topic: "/map",            msgType: "nav_msgs/OccupancyGrid" },
+    robotPose: { topic: "/amcl_pose",     msgType: "geometry_msgs/PoseWithCovarianceStamped" },
     modeGroups: [
       { group: "自律動作", modes: [
         { id: "auto",    label: "自律走行",   sub: "タスクを自動で実行",        icon: "rocket",   tone: "primary", action: null },

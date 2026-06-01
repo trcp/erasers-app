@@ -27,5 +27,5 @@ export default defineConfig({
     alias: {
       'roslib': resolve('./node_modules/roslib/src/RosLib.js'),
     }
-  }
+  },
 })

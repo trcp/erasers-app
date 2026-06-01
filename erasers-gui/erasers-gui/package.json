@@ -10,12 +10,14 @@
     "start": "vite preview --host 0.0.0.0 --port 3000"
   },
   "dependencies": {
+    "@fontsource/ibm-plex-mono": "^5.2.6",
+    "@fontsource/ibm-plex-sans": "^5.2.6",
+    "@fontsource/noto-sans-jp": "^5.2.6",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "ros3d": "^1.1.0",
     "roslib": "^1.4.1",
-    "@fontsource/ibm-plex-sans": "^5.2.6",
-    "@fontsource/ibm-plex-mono": "^5.2.6",
-    "@fontsource/noto-sans-jp": "^5.2.6"
+    "three": "^0.184.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

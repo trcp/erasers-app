@@ -357,7 +357,7 @@ function AppShell() {
   let body
   if (screen === "speech")        body = <Speech utterances={utterances} pcName={activePcName} onReplay={setOverlayUtterance} />
   else if (screen === "remote")   body = <Remote telemetry={telemetry} controls={controls} setControls={setControls} topics={topics} setTopics={setTopics} rosbridgeUrl={`${rosbridge.ssl ? "wss" : "ws"}://${rosbridge.host}:${rosbridge.port}`} pcName={activePcName} robotType={tweaks.robotType} mode={mode} setMode={setMode} />
-  else if (screen === "map")      body = <MapScreen telemetry={telemetry} waypoints={waypoints} setWaypoints={setWaypoints} />
+  else if (screen === "map")      body = <MapScreen />
   else if (screen === "tasks")    body = <Tasks runningTasks={runningTasks} setRunningTasks={setRunningTasks} pcs={pcs} activePc={activePc} setActivePc={setActivePc} />
   else if (screen === "settings") body = <Settings controls={controls} setControls={setControls} rosbridge={rosbridge} setRosbridge={setRosbridge} pcs={pcs} setPcs={setPcs} activePc={activePc} setActivePc={setActivePc} robotType={tweaks.robotType} setRobotType={v => setTweak("robotType", v)} />
 
