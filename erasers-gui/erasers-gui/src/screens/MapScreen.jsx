@@ -47,10 +47,33 @@ function fitCameraToGrid(grid, viewer) {
 export function MapScreen() {
   const { ros, status } = useRos()
   const { activePreset } = useAppContext()
-  const containerRef = useRef(null)
-  const instanceRef  = useRef(null)
-  const fittedRef    = useRef(false)
+  const containerRef    = useRef(null)
+  const instanceRef     = useRef(null)
+  const fittedRef       = useRef(false)
   const [mapStatus, setMapStatus] = useState('waiting')
+
+  const [poseMode, setPoseMode]   = useState(false)
+  const poseModeRef     = useRef(false)
+  const poseDragRef     = useRef(null)
+  const poseHandlersRef = useRef(null)
+
+  useEffect(() => { poseModeRef.current = poseMode }, [poseMode])
+
+  useEffect(() => {
+    if (!poseMode) return
+    const onKey = (e) => {
+      if (e.key !== 'Escape') return
+      setPoseMode(false)
+      poseModeRef.current = false
+      poseDragRef.current = null
+      if (instanceRef.current) {
+        instanceRef.current.previewArrow.visible = false
+        containerRef.current.style.cursor = ''
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [poseMode])
 
   useEffect(() => {
     setMapStatus('waiting')
@@ -105,15 +128,13 @@ export function MapScreen() {
 
       const Vec3 = viewer.cameraControls.center.clone().constructor
 
-      // arrow — robot direction indicator
       const arrow = new ROS3D.Arrow({
-        material:  ROS3D.makeColorMaterial(0.2, 0.6, 1.0, 1.0),
+        material:  ROS3D.makeColorMaterial(1.0, 0.0, 0.0, 1.0),
         origin:    new Vec3(0, 0, 0),
         direction: new Vec3(1, 0, 0),
       })
       viewer.scene.add(arrow)
 
-      // disc — robot body circle, built from bundled THREE.js internals
       const THREEMesh     = Object.getPrototypeOf(ROS3D.Arrow)
       const THREEGeometry = Object.getPrototypeOf(Object.getPrototypeOf(arrow.geometry)).constructor
       const THREEFace3    = arrow.geometry.faces[0].constructor
@@ -128,7 +149,7 @@ export function MapScreen() {
         discGeom.faces.push(new THREEFace3(0, i + 1, i + 2))
       }
       discGeom.computeFaceNormals()
-      const disc = new THREEMesh(discGeom, ROS3D.makeColorMaterial(0.2, 0.6, 1.0, 1.0))
+      const disc = new THREEMesh(discGeom, ROS3D.makeColorMaterial(1.0, 0.0, 0.0, 1.0))
       viewer.scene.add(disc)
 
       const poseSub = new ROSLIB.Topic({
@@ -146,21 +167,120 @@ export function MapScreen() {
         arrow.setDirection(new Vec3(Math.cos(yaw), Math.sin(yaw), 0))
       })
 
-      instanceRef.current = { viewer, gridClient, ro, poseSub, arrow, disc }
+      const previewArrow = new ROS3D.Arrow({
+        material:  ROS3D.makeColorMaterial(1.0, 0.55, 0.0, 0.85),
+        origin:    new Vec3(0, 0, 0),
+        direction: new Vec3(1, 0, 0),
+      })
+      previewArrow.visible = false
+      viewer.scene.add(previewArrow)
+
+      const initialPosePub = new ROSLIB.Topic({
+        ros:         ros.current,
+        name:        activePreset?.initialPose?.topic || '/initialpose',
+        messageType: 'geometry_msgs/PoseWithCovarianceStamped',
+      })
+      initialPosePub.advertise()
+
+      const poseEl = containerRef.current
+
+      const screenToWorld = (clientX, clientY) => {
+        const rect = poseEl.getBoundingClientRect()
+        const ndcX =  (clientX - rect.left) / rect.width  * 2 - 1
+        const ndcY = -((clientY - rect.top)  / rect.height * 2 - 1)
+        const v = new Vec3(ndcX, ndcY, 0.5)
+        v.unproject(viewer.camera)
+        const dir = v.clone().sub(viewer.camera.position).normalize()
+        const t   = -viewer.camera.position.z / dir.z
+        return { x: viewer.camera.position.x + t * dir.x,
+                 y: viewer.camera.position.y + t * dir.y }
+      }
+
+      const onPoseMouseDown = (e) => {
+        if (!poseModeRef.current || e.button !== 0) return
+        e.stopPropagation()
+        e.preventDefault()
+        const { x, y } = screenToWorld(e.clientX, e.clientY)
+        poseDragRef.current = { startX: x, startY: y }
+        previewArrow.position.set(x, y, 0.15)
+        previewArrow.visible = true
+      }
+
+      const onPoseMouseMove = (e) => {
+        if (!poseModeRef.current || !poseDragRef.current) return
+        e.stopPropagation()
+        const { x, y } = screenToWorld(e.clientX, e.clientY)
+        const dx = x - poseDragRef.current.startX
+        const dy = y - poseDragRef.current.startY
+        const len = Math.sqrt(dx * dx + dy * dy)
+        if (len > 0.01) previewArrow.setDirection(new Vec3(dx / len, dy / len, 0))
+      }
+
+      const onPoseMouseUp = (e) => {
+        if (!poseModeRef.current || !poseDragRef.current || e.button !== 0) return
+        e.stopPropagation()
+        const { startX, startY } = poseDragRef.current
+        const end = screenToWorld(e.clientX, e.clientY)
+        const dx  = end.x - startX
+        const dy  = end.y - startY
+        const len = Math.sqrt(dx * dx + dy * dy)
+        previewArrow.visible = false
+        poseDragRef.current = null
+        if (len <= 0.01) return
+        const yaw = Math.atan2(dy, dx)
+        initialPosePub.publish(new ROSLIB.Message({
+          header: { frame_id: 'map', stamp: { sec: 0, nanosec: 0 } },
+          pose: {
+            pose: {
+              position:    { x: startX, y: startY, z: 0 },
+              orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+            },
+            covariance: [
+              0.25, 0, 0, 0, 0, 0,
+              0, 0.25, 0, 0, 0, 0,
+              0, 0, 0, 0, 0, 0,
+              0, 0, 0, 0, 0, 0,
+              0, 0, 0, 0, 0, 0,
+              0, 0, 0, 0, 0, 0.06853891945200942,
+            ],
+          },
+        }))
+        setPoseMode(false)
+        poseModeRef.current = false
+        poseEl.style.cursor = ''
+      }
+
+      poseEl.addEventListener('mousedown', onPoseMouseDown, true)
+      poseEl.addEventListener('mousemove', onPoseMouseMove, true)
+      poseEl.addEventListener('mouseup',   onPoseMouseUp,   true)
+      poseHandlersRef.current = { el: poseEl, onPoseMouseDown, onPoseMouseMove, onPoseMouseUp }
+
+      instanceRef.current = { viewer, gridClient, ro, poseSub, arrow, disc, previewArrow, initialPosePub }
     })
 
     return () => {
       cancelled = true
       if (instanceRef.current) {
-        const { viewer, gridClient, ro, poseSub, arrow, disc } = instanceRef.current
+        const { viewer, gridClient, ro, poseSub, arrow, disc, previewArrow, initialPosePub } = instanceRef.current
+        if (poseHandlersRef.current) {
+          const { el, onPoseMouseDown, onPoseMouseMove, onPoseMouseUp } = poseHandlersRef.current
+          el.removeEventListener('mousedown', onPoseMouseDown, true)
+          el.removeEventListener('mousemove', onPoseMouseMove, true)
+          el.removeEventListener('mouseup',   onPoseMouseUp,   true)
+          poseHandlersRef.current = null
+        }
         ro.disconnect()
         gridClient.unsubscribe()
         poseSub.unsubscribe()
         viewer.scene.remove(arrow)
         viewer.scene.remove(disc)
+        viewer.scene.remove(previewArrow)
+        initialPosePub.unadvertise()
         viewer.stop()
         instanceRef.current = null
       }
+      poseDragRef.current  = null
+      poseModeRef.current  = false
     }
   }, [status])
 
@@ -181,6 +301,26 @@ export function MapScreen() {
               {mapStatus === 'received' ? '● 受信済み' : '○ 受信待ち'}
             </span>
           </div>
+        </div>
+        <div className="page-tools">
+          <button
+            className={`btn${poseMode ? ' accent' : ''}`}
+            disabled={status !== 'connected' || !instanceRef.current}
+            onClick={() => {
+              const next = !poseMode
+              setPoseMode(next)
+              poseModeRef.current = next
+              if (instanceRef.current) {
+                containerRef.current.style.cursor = next ? 'crosshair' : ''
+                if (!next) {
+                  instanceRef.current.previewArrow.visible = false
+                  poseDragRef.current = null
+                }
+              }
+            }}
+          >
+            {poseMode ? '● 位置設定中...' : '初期位置設定'}
+          </button>
         </div>
       </div>
       <div

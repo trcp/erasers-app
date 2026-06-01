@@ -500,7 +500,8 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
         battery: { topic: '/battery_state', msgType: 'sensor_msgs/BatteryState' },
         cmdVel:  { topic: '/cmd_vel',       msgType: 'geometry_msgs/Twist' },
         map:       { topic: '/map',           msgType: 'nav_msgs/OccupancyGrid' },
-        robotPose: { topic: '/amcl_pose',    msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
+        robotPose:   { topic: '/amcl_pose',   msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
+        initialPose: { topic: '/initialpose', msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
         modeGroups: [],
       },
     }))
@@ -563,6 +564,10 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
 
   const updateRobotPose = (field, value) => {
     updatePreset(p => ({ ...p, robotPose: { ...p.robotPose, [field]: value } }))
+  }
+
+  const updateInitialPose = (field, value) => {
+    updatePreset(p => ({ ...p, initialPose: { ...p.initialPose, [field]: value } }))
   }
 
   const handleTopicChange = (updater, value) => {
@@ -806,6 +811,19 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
             <label style={{ display: 'grid', gap: 4 }}>
               <span className="form-label">メッセージ型</span>
               <input className="input mono" value={activePreset?.robotPose?.msgType ?? ''} onChange={e => updateRobotPose('msgType', e.target.value)} placeholder="geometry_msgs/PoseWithCovarianceStamped" />
+            </label>
+          </div>
+        </SubSection>
+
+        <SubSection label="初期自己位置 · パブリッシュトピック">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">トピック</span>
+              <input className="input mono" list="preset-topic-names" value={activePreset?.initialPose?.topic ?? ''} onChange={e => handleTopicChange(updateInitialPose, e.target.value)} placeholder="/initialpose" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">メッセージ型</span>
+              <input className="input mono" value={activePreset?.initialPose?.msgType ?? ''} onChange={e => updateInitialPose('msgType', e.target.value)} placeholder="geometry_msgs/PoseWithCovarianceStamped" />
             </label>
           </div>
         </SubSection>
