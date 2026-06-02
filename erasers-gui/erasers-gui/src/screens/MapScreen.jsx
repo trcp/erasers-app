@@ -196,31 +196,26 @@ export function MapScreen() {
                  y: viewer.camera.position.y + t * dir.y }
       }
 
-      const onPoseMouseDown = (e) => {
-        if (!poseModeRef.current || e.button !== 0) return
-        e.stopPropagation()
-        e.preventDefault()
-        const { x, y } = screenToWorld(e.clientX, e.clientY)
+      const poseStart = (clientX, clientY) => {
+        const { x, y } = screenToWorld(clientX, clientY)
         poseDragRef.current = { startX: x, startY: y }
         previewArrow.position.set(x, y, 0.15)
         previewArrow.visible = true
       }
 
-      const onPoseMouseMove = (e) => {
-        if (!poseModeRef.current || !poseDragRef.current) return
-        e.stopPropagation()
-        const { x, y } = screenToWorld(e.clientX, e.clientY)
+      const poseMove = (clientX, clientY) => {
+        if (!poseDragRef.current) return
+        const { x, y } = screenToWorld(clientX, clientY)
         const dx = x - poseDragRef.current.startX
         const dy = y - poseDragRef.current.startY
         const len = Math.sqrt(dx * dx + dy * dy)
         if (len > 0.01) previewArrow.setDirection(new Vec3(dx / len, dy / len, 0))
       }
 
-      const onPoseMouseUp = (e) => {
-        if (!poseModeRef.current || !poseDragRef.current || e.button !== 0) return
-        e.stopPropagation()
+      const poseEnd = (clientX, clientY) => {
+        if (!poseDragRef.current) return
         const { startX, startY } = poseDragRef.current
-        const end = screenToWorld(e.clientX, e.clientY)
+        const end = screenToWorld(clientX, clientY)
         const dx  = end.x - startX
         const dy  = end.y - startY
         const len = Math.sqrt(dx * dx + dy * dy)
@@ -250,10 +245,57 @@ export function MapScreen() {
         poseEl.style.cursor = ''
       }
 
-      poseEl.addEventListener('mousedown', onPoseMouseDown, true)
-      poseEl.addEventListener('mousemove', onPoseMouseMove, true)
-      poseEl.addEventListener('mouseup',   onPoseMouseUp,   true)
-      poseHandlersRef.current = { el: poseEl, onPoseMouseDown, onPoseMouseMove, onPoseMouseUp }
+      const onPoseMouseDown = (e) => {
+        if (!poseModeRef.current || e.button !== 0) return
+        e.stopPropagation()
+        e.preventDefault()
+        poseStart(e.clientX, e.clientY)
+      }
+
+      const onPoseMouseMove = (e) => {
+        if (!poseModeRef.current || !poseDragRef.current) return
+        e.stopPropagation()
+        poseMove(e.clientX, e.clientY)
+      }
+
+      const onPoseMouseUp = (e) => {
+        if (!poseModeRef.current || !poseDragRef.current || e.button !== 0) return
+        e.stopPropagation()
+        poseEnd(e.clientX, e.clientY)
+      }
+
+      const onPoseTouchStart = (e) => {
+        if (!poseModeRef.current || e.touches.length !== 1) return
+        e.stopPropagation()
+        e.preventDefault()
+        poseStart(e.touches[0].clientX, e.touches[0].clientY)
+      }
+
+      const onPoseTouchMove = (e) => {
+        if (!poseModeRef.current || !poseDragRef.current || e.touches.length !== 1) return
+        e.stopPropagation()
+        e.preventDefault()
+        poseMove(e.touches[0].clientX, e.touches[0].clientY)
+      }
+
+      const onPoseTouchEnd = (e) => {
+        if (!poseModeRef.current || !poseDragRef.current) return
+        e.stopPropagation()
+        const t = e.changedTouches[0]
+        if (t) poseEnd(t.clientX, t.clientY)
+      }
+
+      poseEl.addEventListener('mousedown',  onPoseMouseDown,  true)
+      poseEl.addEventListener('mousemove',  onPoseMouseMove,  true)
+      poseEl.addEventListener('mouseup',    onPoseMouseUp,    true)
+      poseEl.addEventListener('touchstart', onPoseTouchStart, { capture: true, passive: false })
+      poseEl.addEventListener('touchmove',  onPoseTouchMove,  { capture: true, passive: false })
+      poseEl.addEventListener('touchend',   onPoseTouchEnd,   true)
+      poseHandlersRef.current = {
+        el: poseEl,
+        onPoseMouseDown, onPoseMouseMove, onPoseMouseUp,
+        onPoseTouchStart, onPoseTouchMove, onPoseTouchEnd,
+      }
 
       instanceRef.current = { viewer, gridClient, ro, poseSub, arrow, disc, previewArrow, initialPosePub }
     })
@@ -263,10 +305,14 @@ export function MapScreen() {
       if (instanceRef.current) {
         const { viewer, gridClient, ro, poseSub, arrow, disc, previewArrow, initialPosePub } = instanceRef.current
         if (poseHandlersRef.current) {
-          const { el, onPoseMouseDown, onPoseMouseMove, onPoseMouseUp } = poseHandlersRef.current
-          el.removeEventListener('mousedown', onPoseMouseDown, true)
-          el.removeEventListener('mousemove', onPoseMouseMove, true)
-          el.removeEventListener('mouseup',   onPoseMouseUp,   true)
+          const { el, onPoseMouseDown, onPoseMouseMove, onPoseMouseUp,
+                  onPoseTouchStart, onPoseTouchMove, onPoseTouchEnd } = poseHandlersRef.current
+          el.removeEventListener('mousedown',  onPoseMouseDown,  true)
+          el.removeEventListener('mousemove',  onPoseMouseMove,  true)
+          el.removeEventListener('mouseup',    onPoseMouseUp,    true)
+          el.removeEventListener('touchstart', onPoseTouchStart, true)
+          el.removeEventListener('touchmove',  onPoseTouchMove,  true)
+          el.removeEventListener('touchend',   onPoseTouchEnd,   true)
           poseHandlersRef.current = null
         }
         ro.disconnect()
@@ -287,7 +333,7 @@ export function MapScreen() {
   const mapTopic = activePreset?.map?.topic || '/map'
 
   return (
-    <div style={{ display: 'grid', gap: 14 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 14 }}>
       <div className="page-head">
         <div>
           <h2 className="page-title">マップ</h2>
@@ -326,8 +372,8 @@ export function MapScreen() {
       <div
         ref={containerRef}
         style={{
-          width: '100%',
-          height: 'calc(100vh - 140px)',
+          flex: 1,
+          minHeight: 0,
           borderRadius: 8,
           overflow: 'hidden',
           background: '#f5f5f5',
