@@ -1,3 +1,5 @@
+> This project is created with generative AI and serves as a benchmark to experience the capabilities of generative AI.
+
 # erasers-app
 
 ロボット管理・データ可視化・タスク実行のための Web アプリケーション。
