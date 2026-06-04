@@ -2,6 +2,13 @@ import { useEffect } from 'react'
 import I from '../icons.jsx'
 import { useAppContext } from '../context/AppContext'
 
+const uttFontSize = (len, scale = 1) => {
+  if (len <= 20) return `clamp(${32*scale}px, ${4.2*scale}vw, ${56*scale}px)`
+  if (len <= 40) return `clamp(${24*scale}px, ${3.2*scale}vw, ${44*scale}px)`
+  if (len <= 80) return `clamp(${18*scale}px, ${2.4*scale}vw, ${32*scale}px)`
+  return `clamp(${14*scale}px, ${1.8*scale}vw, ${24*scale}px)`
+}
+
 function Section({ title, sub, tools, children, style }) {
   return (
     <div className="card" style={style}>
@@ -20,6 +27,7 @@ export function Speech({ utterances, pcName, onReplay }) {
   const speechTopic = activePreset?.speech?.topic ?? '/robot/speech'
 
   const latest = utterances[0]
+
   return (
     <div className="speech-screen">
       <div className="utterance-modal">
@@ -39,7 +47,7 @@ export function Speech({ utterances, pcName, onReplay }) {
         </div>
         <div className="utt-body">
           {latest ? (
-            <div className="utt-text">
+            <div className="utt-text" style={{ fontSize: uttFontSize(latest.text.length) }}>
               <span className="utt-quote">"</span>
               {latest.text}
               <span className="utt-quote">"</span>
@@ -100,7 +108,7 @@ export function UtteranceOverlay({ utterance, onClose }) {
           </div>
           <button className="icon-btn bordered" onClick={onClose}><I.x size={16} /></button>
         </div>
-        <div className="utt-overlay-text">
+        <div className="utt-overlay-text" style={{ fontSize: uttFontSize(utterance.text.length, 1.27) }}>
           <span className="utt-quote">"</span>
           {utterance.text}
           <span className="utt-quote">"</span>

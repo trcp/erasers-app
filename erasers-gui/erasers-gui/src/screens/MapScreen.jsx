@@ -57,7 +57,12 @@ export function MapScreen() {
   const poseDragRef     = useRef(null)
   const poseHandlersRef = useRef(null)
 
+  const [robotPos, setRobotPos] = useState(null)
+  const [paused, setPaused]     = useState(false)
+  const pausedRef               = useRef(false)
+
   useEffect(() => { poseModeRef.current = poseMode }, [poseMode])
+  useEffect(() => { pausedRef.current = paused }, [paused])
 
   useEffect(() => {
     if (!poseMode) return
@@ -128,29 +133,24 @@ export function MapScreen() {
 
       const Vec3 = viewer.cameraControls.center.clone().constructor
 
-      const arrow = new ROS3D.Arrow({
-        material:  ROS3D.makeColorMaterial(1.0, 0.0, 0.0, 1.0),
-        origin:    new Vec3(0, 0, 0),
-        direction: new Vec3(1, 0, 0),
-      })
-      viewer.scene.add(arrow)
+      const THREEMesh = Object.getPrototypeOf(ROS3D.Arrow)
+      const _tmpArrow = new ROS3D.Arrow({ material: ROS3D.makeColorMaterial(0,0,0,0), origin: new Vec3(0,0,0), direction: new Vec3(1,0,0) })
+      const THREEGeometry = Object.getPrototypeOf(Object.getPrototypeOf(_tmpArrow.geometry)).constructor
+      const THREEFace3    = _tmpArrow.geometry.faces[0].constructor
 
-      const THREEMesh     = Object.getPrototypeOf(ROS3D.Arrow)
-      const THREEGeometry = Object.getPrototypeOf(Object.getPrototypeOf(arrow.geometry)).constructor
-      const THREEFace3    = arrow.geometry.faces[0].constructor
-      const DISC_R = 0.5, DISC_N = 32
-      const discGeom = new THREEGeometry()
-      discGeom.vertices.push(new Vec3(0, 0, 0))
-      for (let i = 0; i <= DISC_N; i++) {
-        const a = (i / DISC_N) * Math.PI * 2
-        discGeom.vertices.push(new Vec3(DISC_R * Math.cos(a), DISC_R * Math.sin(a), 0))
-      }
-      for (let i = 0; i < DISC_N; i++) {
-        discGeom.faces.push(new THREEFace3(0, i + 1, i + 2))
-      }
-      discGeom.computeFaceNormals()
-      const disc = new THREEMesh(discGeom, ROS3D.makeColorMaterial(1.0, 0.0, 0.0, 1.0))
-      viewer.scene.add(disc)
+      const TRI_L = 1.0, TRI_W = 0.7
+      const triGeom = new THREEGeometry()
+      triGeom.vertices.push(
+        new Vec3( TRI_L * 0.65,  0,          0),
+        new Vec3(-TRI_L * 0.35,  TRI_W / 2,  0),
+        new Vec3(-TRI_L * 0.35, -TRI_W / 2,  0),
+      )
+      triGeom.faces.push(new THREEFace3(0, 1, 2))
+      triGeom.computeFaceNormals()
+      const triMat = ROS3D.makeColorMaterial(1.0, 0.0, 0.0, 1.0)
+      if (triMat.emissive) triMat.emissive.setRGB(1.0, 0.0, 0.0)
+      const triangle = new THREEMesh(triGeom, triMat)
+      viewer.scene.add(triangle)
 
       const poseSub = new ROSLIB.Topic({
         ros:         ros.current,
@@ -162,9 +162,9 @@ export function MapScreen() {
         const { x, y } = pose.position
         const q = pose.orientation
         const yaw = 2 * Math.atan2(q.z, q.w)
-        disc.position.set(x, y, 0.05)
-        arrow.position.set(x, y, 0.1)
-        arrow.setDirection(new Vec3(Math.cos(yaw), Math.sin(yaw), 0))
+        triangle.position.set(x, y, 0.05)
+        triangle.rotation.z = yaw
+        if (!pausedRef.current) setRobotPos({ x, y, angle: yaw })
       })
 
       const previewArrow = new ROS3D.Arrow({
@@ -297,13 +297,13 @@ export function MapScreen() {
         onPoseTouchStart, onPoseTouchMove, onPoseTouchEnd,
       }
 
-      instanceRef.current = { viewer, gridClient, ro, poseSub, arrow, disc, previewArrow, initialPosePub }
+      instanceRef.current = { viewer, gridClient, ro, poseSub, triangle, previewArrow, initialPosePub }
     })
 
     return () => {
       cancelled = true
       if (instanceRef.current) {
-        const { viewer, gridClient, ro, poseSub, arrow, disc, previewArrow, initialPosePub } = instanceRef.current
+        const { viewer, gridClient, ro, poseSub, triangle, previewArrow, initialPosePub } = instanceRef.current
         if (poseHandlersRef.current) {
           const { el, onPoseMouseDown, onPoseMouseMove, onPoseMouseUp,
                   onPoseTouchStart, onPoseTouchMove, onPoseTouchEnd } = poseHandlersRef.current
@@ -318,8 +318,7 @@ export function MapScreen() {
         ro.disconnect()
         gridClient.unsubscribe()
         poseSub.unsubscribe()
-        viewer.scene.remove(arrow)
-        viewer.scene.remove(disc)
+        viewer.scene.remove(triangle)
         viewer.scene.remove(previewArrow)
         initialPosePub.unadvertise()
         viewer.stop()
@@ -349,6 +348,24 @@ export function MapScreen() {
           </div>
         </div>
         <div className="page-tools">
+          {robotPos && (
+            <span style={{
+              fontFamily: 'var(--mono)',
+              fontSize: 13,
+              color: paused ? 'var(--ink-3)' : 'var(--ink-1)',
+            }}>
+              <span style={{ opacity: 0.6, marginRight: 3 }}>X</span>{robotPos.x.toFixed(3)}
+              <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>Y</span>{robotPos.y.toFixed(3)}
+              <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>θ</span>{robotPos.angle.toFixed(3)} rad
+            </span>
+          )}
+          <button
+            className={`btn${paused ? ' accent' : ''}`}
+            disabled={status !== 'connected'}
+            onClick={() => setPaused(p => !p)}
+          >
+            {paused ? '▶ 再開' : '■ 停止'}
+          </button>
           <button
             className={`btn${poseMode ? ' accent' : ''}`}
             disabled={status !== 'connected' || !instanceRef.current}
@@ -369,16 +386,18 @@ export function MapScreen() {
           </button>
         </div>
       </div>
-      <div
-        ref={containerRef}
-        style={{
-          flex: 1,
-          minHeight: 0,
-          borderRadius: 8,
-          overflow: 'hidden',
-          background: '#f5f5f5',
-        }}
-      />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div
+          ref={containerRef}
+          style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: 8,
+            overflow: 'hidden',
+            background: '#f5f5f5',
+          }}
+        />
+      </div>
     </div>
   )
 }
