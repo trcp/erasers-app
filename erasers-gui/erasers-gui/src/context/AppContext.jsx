@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react'
 import { useTweaks } from '../components/TweaksPanel'
 import { defaultPresets } from '../constants/defaultPresets'
-import { getServerUrl, fetchNetworkInterfaces, fetchExecutionConfig } from '../services/erasersApi'
+import { getServerUrl, fetchNetworkInterfaces, fetchExecutionConfig, saveExecutionConfig } from '../services/erasersApi'
 
 const AppContext = createContext(null)
 
@@ -113,12 +113,26 @@ export function AppProvider({ children }) {
     }
   }, [tweaks.robotType])
 
-  const [rosConfigs, setRosConfigs] = useState({})
+  const [rosConfigs, setRosConfigs] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('erasers.rosConfigs'))
+      if (stored && typeof stored === 'object') return stored
+    } catch { /* ignore */ }
+    return {}
+  })
+  const rosConfigsRef = useRef(rosConfigs)
+  useEffect(() => { rosConfigsRef.current = rosConfigs }, [rosConfigs])
   const prevOnlineRef = useRef({})
 
-  const loadRosConfig = useCallback(async (pc) => {
+  const loadRosConfig = useCallback(async (pc, applyStored = false) => {
     try {
       const base = getServerUrl(pc)
+      if (applyStored) {
+        const stored = rosConfigsRef.current[pc.id]
+        if (stored) {
+          await saveExecutionConfig(base, { network_if: stored.network_if, ros_master_uri: stored.ros_master_uri })
+        }
+      }
       const [nifs, cfg] = await Promise.all([fetchNetworkInterfaces(base), fetchExecutionConfig(base)])
       const selectedIf = nifs.interfaces.find(n => n.name === cfg.network_if)
       setRosConfigs(prev => ({
@@ -131,7 +145,7 @@ export function AppProvider({ children }) {
   useEffect(() => {
     pcs.forEach(pc => {
       const wasOnline = prevOnlineRef.current[pc.id]
-      if (pc.online && !wasOnline) loadRosConfig(pc)
+      if (pc.online && !wasOnline) loadRosConfig(pc, true)
       prevOnlineRef.current[pc.id] = pc.online
     })
   }, [pcs, loadRosConfig])
@@ -172,6 +186,7 @@ export function AppProvider({ children }) {
   useEffect(() => { localStorage.setItem('erasers.rosbridge', JSON.stringify(rosbridge)) }, [rosbridge])
   useEffect(() => { localStorage.setItem('erasers.robotPresets', JSON.stringify(robotPresets)) }, [robotPresets])
   useEffect(() => { localStorage.setItem('erasers.controls', JSON.stringify(allControls)) }, [allControls])
+  useEffect(() => { localStorage.setItem('erasers.rosConfigs', JSON.stringify(rosConfigs)) }, [rosConfigs])
   useEffect(() => { localStorage.setItem('erasers.robotType', tweaks.robotType) }, [tweaks.robotType])
   useEffect(() => {
     const keys = Object.keys(robotPresets)

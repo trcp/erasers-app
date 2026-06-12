@@ -351,11 +351,6 @@ function RosSync() {
 }
 
 function EmergencyOverlay({ emergencyStop, onClose }) {
-  useEffect(() => {
-    const id = setTimeout(onClose, 10000)
-    return () => clearTimeout(id)
-  }, [emergencyStop.time])
-
   return (
     <div className="utt-overlay" onClick={onClose}>
       <div className="emergency-overlay-card" onClick={e => e.stopPropagation()}>
@@ -375,10 +370,7 @@ function EmergencyOverlay({ emergencyStop, onClose }) {
         <div style={{ display: "grid", placeItems: "center", padding: "24px 32px 20px" }}>
           <img src="/emergency.gif" alt="EMERGENCY STOP" style={{ maxWidth: "100%", maxHeight: "50vh", borderRadius: 12 }} />
         </div>
-        <div className="utt-overlay-progress">
-          <div className="utt-overlay-progress-bar" key={+emergencyStop.time} style={{ background: "var(--danger)" }} />
-        </div>
-        <div className="utt-overlay-hint">クリック / ESC で閉じる · 10 秒で自動閉</div>
+        <div className="utt-overlay-hint">クリック / ESC で閉じる</div>
       </div>
     </div>
   )
