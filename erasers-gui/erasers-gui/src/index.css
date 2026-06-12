@@ -604,6 +604,17 @@ input[type="range"].slider::-moz-range-thumb {
   color: var(--ink-3); letter-spacing: 0.06em;
 }
 
+/* --- Emergency stop overlay --- */
+.emergency-overlay-card {
+  background: var(--surface);
+  border-radius: 28px;
+  width: 100%; max-width: 800px;
+  box-shadow: 0 32px 80px rgba(0,0,0,0.45), 0 0 0 2px var(--danger);
+  overflow: hidden;
+  position: relative;
+  animation: utt-pop .35s cubic-bezier(.2,1,.3,1);
+}
+
 /* --- Topics tab --- */
 .topics-grid {
   display: grid;

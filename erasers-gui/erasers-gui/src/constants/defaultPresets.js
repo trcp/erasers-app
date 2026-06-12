@@ -3,8 +3,9 @@
 export const defaultPresets = {
   AMR: {
     label: "移動ロボット",
-    speech:  { topic: "/robot/speech",  msgType: "std_msgs/String" },
-    battery: { topic: "/battery_state", msgType: "sensor_msgs/BatteryState" },
+    speech:        { topic: "/robot/speech",   msgType: "std_msgs/String" },
+    emergencyStop: { topic: "/emergency_stop", msgType: "std_msgs/Bool" },
+    battery:       { topic: "/battery_state",  msgType: "sensor_msgs/BatteryState" },
     cmdVel:  { topic: "/cmd_vel",        msgType: "geometry_msgs/Twist" },
     map:       { topic: "/map",            msgType: "nav_msgs/OccupancyGrid" },
     robotPose:   { topic: "/amcl_pose",     msgType: "geometry_msgs/PoseWithCovarianceStamped" },

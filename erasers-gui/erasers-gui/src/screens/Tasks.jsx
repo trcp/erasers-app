@@ -350,7 +350,7 @@ export function Tasks({ runningTasks, setRunningTasks, pcs, activePc, setActiveP
                 const count = serverTasks.filter(p => p.taskName === t).length
                 const active = filter === t
                 return (
-                  <button key={t} onClick={() => setFilter(t)} style={{
+                  <button key={t} onClick={() => { setFilter(t); setSelectedId(serverTasks.find(p => p.taskName === t)?.id ?? null) }} style={{
                     padding: "7px 14px", fontSize: 13,
                     fontWeight: active ? 600 : 400,
                     borderRadius: 6,

@@ -49,6 +49,7 @@ export function AppProvider({ children }) {
 
   const [utterances, setUtterances] = useState([])
   const [overlayUtterance, setOverlayUtterance] = useState(null)
+  const [emergencyStop, setEmergencyStop] = useState(null)
 
   useEffect(() => {
     if (!overlayUtterance) return
@@ -56,6 +57,15 @@ export function AppProvider({ children }) {
     window.addEventListener("keydown", k)
     return () => window.removeEventListener("keydown", k)
   }, [overlayUtterance])
+
+  useEffect(() => {
+    if (!emergencyStop || emergencyStop.dismissed) return
+    const k = (e) => {
+      if (e.key === "Escape") setEmergencyStop(prev => prev ? { ...prev, dismissed: true } : null)
+    }
+    window.addEventListener("keydown", k)
+    return () => window.removeEventListener("keydown", k)
+  }, [emergencyStop])
 
   const [pcs, setPcs] = useState(() => {
     try { return JSON.parse(localStorage.getItem('erasers.pcs')) || [] } catch { return [] }
@@ -214,6 +224,7 @@ export function AppProvider({ children }) {
     waypoints, setWaypoints,
     utterances, setUtterances,
     overlayUtterance, setOverlayUtterance,
+    emergencyStop, setEmergencyStop,
     pcs, setPcs,
     activePc, setActivePc,
     rosbridge, setRosbridge,

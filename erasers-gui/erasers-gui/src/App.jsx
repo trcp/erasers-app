@@ -272,21 +272,24 @@ function GlobalGamepad() {
 }
 
 function RosSync() {
-  const { setTelemetry, setUtterances, setOverlayUtterance, screen, activePreset } = useAppContext()
+  const { setTelemetry, setUtterances, setOverlayUtterance, setEmergencyStop, screen, activePreset } = useAppContext()
   const screenRef = useRef(screen)
   useEffect(() => { screenRef.current = screen }, [screen])
 
-  const speechTopic   = activePreset?.speech?.topic   ?? '/robot/speech'
-  const speechMsgType = activePreset?.speech?.msgType ?? 'std_msgs/String'
-  const batteryTopic   = activePreset?.battery?.topic   ?? '/battery_state'
-  const batteryMsgType = activePreset?.battery?.msgType ?? 'sensor_msgs/BatteryState'
+  const speechTopic        = activePreset?.speech?.topic          ?? '/robot/speech'
+  const speechMsgType      = activePreset?.speech?.msgType        ?? 'std_msgs/String'
+  const batteryTopic       = activePreset?.battery?.topic         ?? '/battery_state'
+  const batteryMsgType     = activePreset?.battery?.msgType       ?? 'sensor_msgs/BatteryState'
+  const emergencyTopic     = activePreset?.emergencyStop?.topic   ?? '/emergency_stop'
+  const emergencyMsgType   = activePreset?.emergencyStop?.msgType ?? 'std_msgs/Bool'
 
-  const { message: battMsg }   = useRosTopic(batteryTopic, batteryMsgType)
-  const { message: odomMsg }   = useRosTopic('/odom', 'nav_msgs/Odometry', 'subscribe', 100)
-  const { message: tempMsg }   = useRosTopic('/temperature', 'sensor_msgs/Temperature')
-  const { message: cpuMsg }    = useRosTopic('/cpu_usage', 'std_msgs/Float64')
-  const { message: wifiMsg }   = useRosTopic('/wifi_signal', 'std_msgs/Int32')
-  const { message: speechMsg } = useRosTopic(speechTopic, speechMsgType)
+  const { message: battMsg }      = useRosTopic(batteryTopic, batteryMsgType)
+  const { message: odomMsg }      = useRosTopic('/odom', 'nav_msgs/Odometry', 'subscribe', 100)
+  const { message: tempMsg }      = useRosTopic('/temperature', 'sensor_msgs/Temperature')
+  const { message: cpuMsg }       = useRosTopic('/cpu_usage', 'std_msgs/Float64')
+  const { message: wifiMsg }      = useRosTopic('/wifi_signal', 'std_msgs/Int32')
+  const { message: speechMsg }    = useRosTopic(speechTopic, speechMsgType)
+  const { message: emergencyMsg } = useRosTopic(emergencyTopic, emergencyMsgType)
 
   useEffect(() => {
     if (battMsg == null) return
@@ -333,7 +336,52 @@ function RosSync() {
     if (screenRef.current === 'speech') setOverlayUtterance(u)
   }, [speechMsg])
 
+  useEffect(() => {
+    if (emergencyMsg == null) return
+    if (emergencyMsg.data) {
+      // dismissed 済みなら再表示しない（false → true の遷移を待つ）
+      setEmergencyStop(prev => prev?.dismissed ? prev : { time: new Date() })
+    } else {
+      // false を受信したら dismissed フラグをリセット（次の true で再表示可能にする）
+      setEmergencyStop(null)
+    }
+  }, [emergencyMsg])
+
   return null
+}
+
+function EmergencyOverlay({ emergencyStop, onClose }) {
+  useEffect(() => {
+    const id = setTimeout(onClose, 10000)
+    return () => clearTimeout(id)
+  }, [emergencyStop.time])
+
+  return (
+    <div className="utt-overlay" onClick={onClose}>
+      <div className="emergency-overlay-card" onClick={e => e.stopPropagation()}>
+        <div className="utt-overlay-head">
+          <div className="utt-overlay-avatar" style={{ background: "var(--danger-bg)", color: "var(--danger)" }}>
+            <I.stop size={28} />
+            <span className="utt-pulse" style={{ borderColor: "var(--danger)" }} />
+          </div>
+          <div className="utt-overlay-meta">
+            <div className="utt-overlay-label" style={{ color: "var(--danger)" }}>
+              <span className="utt-led" style={{ background: "var(--danger)" }} /> 緊急停止
+            </div>
+            <div className="utt-overlay-time mono">{emergencyStop.time.toLocaleTimeString("ja-JP", { hour12: false })}</div>
+          </div>
+          <button className="icon-btn bordered" onClick={onClose}><I.x size={16} /></button>
+        </div>
+        <div style={{ display: "grid", placeItems: "center", padding: "24px 32px 20px" }}>
+          <img src="/emergency.gif" alt="EMERGENCY STOP" style={{ maxWidth: "100%", maxHeight: "50vh", borderRadius: 12 }} />
+        </div>
+        <div className="utt-overlay-progress">
+          <div className="utt-overlay-progress-bar" key={+emergencyStop.time} style={{ background: "var(--danger)" }} />
+        </div>
+        <div className="utt-overlay-hint">クリック / ESC で閉じる · 10 秒で自動閉</div>
+      </div>
+    </div>
+  )
 }
 
 function AppShell() {
@@ -342,6 +390,7 @@ function AppShell() {
     telemetry, controls, setControls,
     mode, setMode, waypoints, setWaypoints,
     utterances, setUtterances, overlayUtterance, setOverlayUtterance,
+    emergencyStop, setEmergencyStop,
     pcs, setPcs, activePc, setActivePc,
     rosbridge, setRosbridge,
     runningTasks, setRunningTasks,
@@ -372,6 +421,9 @@ function AppShell() {
       <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} />
       {overlayUtterance && screen === "speech" && (
         <UtteranceOverlay utterance={overlayUtterance} onClose={() => setOverlayUtterance(null)} />
+      )}
+      {emergencyStop && !emergencyStop.dismissed && (
+        <EmergencyOverlay emergencyStop={emergencyStop} onClose={() => setEmergencyStop(prev => prev ? { ...prev, dismissed: true } : null)} />
       )}
       <TweaksPanel title="Tweaks">
         <TweaksContent />

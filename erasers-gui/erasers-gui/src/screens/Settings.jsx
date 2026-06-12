@@ -496,12 +496,13 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
       ...prev,
       [key]: {
         label: name,
-        speech:  { topic: '/robot/speech',  msgType: 'std_msgs/String' },
-        battery: { topic: '/battery_state', msgType: 'sensor_msgs/BatteryState' },
-        cmdVel:  { topic: '/cmd_vel',       msgType: 'geometry_msgs/Twist' },
-        map:       { topic: '/map',           msgType: 'nav_msgs/OccupancyGrid' },
-        robotPose:   { topic: '/amcl_pose',   msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
-        initialPose: { topic: '/initialpose', msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
+        speech:        { topic: '/robot/speech',   msgType: 'std_msgs/String' },
+        emergencyStop: { topic: '/emergency_stop', msgType: 'std_msgs/Bool' },
+        battery:       { topic: '/battery_state',  msgType: 'sensor_msgs/BatteryState' },
+        cmdVel:        { topic: '/cmd_vel',         msgType: 'geometry_msgs/Twist' },
+        map:           { topic: '/map',             msgType: 'nav_msgs/OccupancyGrid' },
+        robotPose:     { topic: '/amcl_pose',       msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
+        initialPose:   { topic: '/initialpose',     msgType: 'geometry_msgs/PoseWithCovarianceStamped' },
         modeGroups: [],
       },
     }))
@@ -568,6 +569,10 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
 
   const updateInitialPose = (field, value) => {
     updatePreset(p => ({ ...p, initialPose: { ...p.initialPose, [field]: value } }))
+  }
+
+  const updateEmergencyStop = (field, value) => {
+    updatePreset(p => ({ ...p, emergencyStop: { ...p.emergencyStop, [field]: value } }))
   }
 
   const handleTopicChange = (updater, value) => {
@@ -786,6 +791,22 @@ export function Settings({ controls, setControls, rosbridge, setRosbridge, pcs, 
             <button className="btn sm" onClick={resetToDefault} title="公開プリセットファイルからリセット">
               <I.refresh size={12} /> デフォルト
             </button>
+          </div>
+        </SubSection>
+
+        <SubSection label="緊急停止 · 受信トピック">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, alignItems: 'end' }} className="rosbridge-form">
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">トピック</span>
+              <input className="input mono" list="preset-topic-names" value={activePreset?.emergencyStop?.topic ?? ''} onChange={e => handleTopicChange(updateEmergencyStop, e.target.value)} placeholder="/emergency_stop" />
+            </label>
+            <label style={{ display: 'grid', gap: 4 }}>
+              <span className="form-label">メッセージ型</span>
+              <input className="input mono" value={activePreset?.emergencyStop?.msgType ?? ''} onChange={e => updateEmergencyStop('msgType', e.target.value)} placeholder="std_msgs/Bool" />
+            </label>
+          </div>
+          <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-3)', fontFamily: 'var(--mono)' }}>
+            data: true を受信したときに緊急停止モーダルを表示します
           </div>
         </SubSection>
 
