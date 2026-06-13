@@ -10,7 +10,8 @@ docker build -t erasers:gui . || die "Docker build failed"
 log "Docker image built successfully"
 
 # systemd service
-SERVICE_SRC="/home/unitree/erasers-app/erasers-gui/erasers.gui.service"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SERVICE_SRC="$SCRIPT_DIR/erasers.gui.service"
 SERVICE_DST="/etc/systemd/system/erasers.gui.service"
 
 [ -f "$SERVICE_SRC" ] || die "Service file not found: $SERVICE_SRC"
@@ -22,20 +23,28 @@ log "systemd service enabled"
 
 # Autostart
 
-# AUTOSTART_DIR="/home/hsr-hmi/.config/autostart"
-# AUTOSTART_FILE="$AUTOSTART_DIR/erasers-gui.desktop"
+read -p "ログイン時に Chromium を自動起動しますか？ [y/N]: " autostart_answer
+case "$autostart_answer" in
+  [yY] | [yY][eE][sS])
+    AUTOSTART_DIR="$HOME/.config/autostart"
+    AUTOSTART_FILE="$AUTOSTART_DIR/erasers-gui.desktop"
 
-# log "Configuring autostart..."
-# mkdir -p "$AUTOSTART_DIR"
-# cat > "$AUTOSTART_FILE" <<EOF
-# [Desktop Entry]
-# Type=Application
-# Name=Erasers GUI
-# Exec=/usr/bin/chromium-browser --password-store=basic --kiosk --incognito --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
-# Hidden=false
-# NoDisplay=false
-# X-GNOME-Autostart-enabled=true
-# EOF
-# log "Autostart configured: $AUTOSTART_FILE"
+    log "Configuring autostart..."
+    mkdir -p "$AUTOSTART_DIR"
+    cat > "$AUTOSTART_FILE" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Erasers GUI
+Exec=/usr/bin/chromium-browser --password-store=basic --kiosk --disable-features=Translate -disk-cache-size=1 -media-cache-size=1 http://localhost:3000
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+EOF
+    log "Autostart configured: $AUTOSTART_FILE"
+    ;;
+  *)
+    log "Autostart skipped"
+    ;;
+esac
 
-# log "Installation complete"
+log "Installation complete"
