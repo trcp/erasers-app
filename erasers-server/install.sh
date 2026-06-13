@@ -64,12 +64,18 @@ echo "--- [3/3] systemd サービスをインストールしますか？ ---"
 read -p "  Task Controller Server をサービス化しますか？ [y/N]: " svc_answer
 case "$svc_answer" in
   [yY] | [yY][eE][sS])
+    read -p "  タスク設定ディレクトリのパスを入力してください: " config_path
+    if [ -z "$config_path" ]; then
+      echo "パスが入力されていません。スキップしました。"
+      break
+    fi
+
     SERVICE_SRC="$SCRIPT_DIR/erasers-task-controller-server.service"
     SERVICE_DST="/etc/systemd/system/erasers-task-controller-server.service"
 
     UV_PATH="$(command -v uv)"
     sed \
-      -e "s|ExecStart=.*erasers_task_controller_server\.py|ExecStart=$UV_PATH run $SCRIPT_DIR/erasers_task_controller_server.py|" \
+      -e "s|ExecStart=.*erasers_task_controller_server\.py.*|ExecStart=$UV_PATH run $SCRIPT_DIR/erasers_task_controller_server.py --config $config_path|" \
       -e "s|User=.*|User=$USER|" \
       "$SERVICE_SRC" | sudo tee "$SERVICE_DST" > /dev/null
 
