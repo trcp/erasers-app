@@ -29,5 +29,5 @@ fi
 
 # サーバーをバックグラウンドで起動
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-nohup python3 "$SCRIPT_DIR/erasers_task_controller_server.py" \
+nohup uv run "$SCRIPT_DIR/erasers_task_controller_server.py" \
   --config "$CONFIG" > /tmp/erasers_server.log 2>&1 &

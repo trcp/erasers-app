@@ -37,16 +37,21 @@ echo "インストール先: $SCRIPT_DIR"
 echo ""
 
 # ------------------------------------------------------------
-# 1. Python依存パッケージ
+# 1. uv の確認
 # ------------------------------------------------------------
-echo "--- [1/4] Python パッケージをインストールします ---"
-pip3 install --user --break-system-packages fastapi uvicorn pydantic lupa
+echo "--- [1/3] uv を確認します ---"
+if ! command -v uv &> /dev/null; then
+  echo "uv が見つかりません。先にインストールしてください。"
+  echo "  https://docs.astral.sh/uv/getting-started/installation/"
+  exit 1
+fi
+echo "uv: $(uv --version)"
 echo ""
 
 # ------------------------------------------------------------
 # 2. スクリプトに実行権限を付与
 # ------------------------------------------------------------
-echo "--- [2/4] 実行権限を設定します ---"
+echo "--- [2/3] 実行権限を設定します ---"
 chmod +x "$SCRIPT_DIR/start_erasers_task_controller_server.sh"
 chmod +x "$SCRIPT_DIR/erasers_task_controller_server.py"
 echo "完了"
@@ -55,16 +60,16 @@ echo ""
 # ------------------------------------------------------------
 # 3. systemd システムサービスをインストール
 # ------------------------------------------------------------
-echo "--- [3/4] systemd サービスをインストールしますか？ ---"
+echo "--- [3/3] systemd サービスをインストールしますか？ ---"
 read -p "  Task Controller Server をサービス化しますか？ [y/N]: " svc_answer
 case "$svc_answer" in
   [yY] | [yY][eE][sS])
     SERVICE_SRC="$SCRIPT_DIR/erasers-task-controller-server.service"
     SERVICE_DST="/etc/systemd/system/erasers-task-controller-server.service"
 
-    # ExecStart・User・Group・PYTHONPATH をこのPCの実際の値に書き換えて配置
+    UV_PATH="$(command -v uv)"
     sed \
-      -e "s|ExecStart=\(/usr/bin/python3\) [^ ]*erasers_task_controller_server\.py|ExecStart=\1 $SCRIPT_DIR/erasers_task_controller_server.py|" \
+      -e "s|ExecStart=.*erasers_task_controller_server\.py|ExecStart=$UV_PATH run $SCRIPT_DIR/erasers_task_controller_server.py|" \
       "$SERVICE_SRC" | sudo tee "$SERVICE_DST" > /dev/null
 
     sudo systemctl daemon-reload
@@ -80,32 +85,12 @@ esac
 echo ""
 
 # ------------------------------------------------------------
-# 4. erasers:// カスタムURLスキームを登録
-# ------------------------------------------------------------
-echo "--- [4/4] erasers:// カスタムURLスキームを登録します ---"
-
-DESKTOP_SRC="$SCRIPT_DIR/erasers-task-controller-server.desktop"
-DESKTOP_DST="$HOME/.local/share/applications/erasers-task-controller-server.desktop"
-
-mkdir -p "$HOME/.local/share/applications"
-
-# Exec パスをこのPCの実際のパスに書き換えて配置
-sed "s|Exec=.*start_erasers_task_controller_server.sh|Exec=$SCRIPT_DIR/start_erasers_task_controller_server.sh|" \
-  "$DESKTOP_SRC" > "$DESKTOP_DST"
-
-update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-xdg-mime default erasers-task-controller-server.desktop x-scheme-handler/erasers
-
-echo "完了"
-echo ""
-
-# ------------------------------------------------------------
 # 完了
 # ------------------------------------------------------------
 echo -e "${GREEN}============================================================"
 echo "  インストール完了！"
 echo "============================================================${NC}"
 echo ""
-echo "  ブラウザで erasers://start?config=... を開くと"
-echo "  Task Controller Server が起動します。"
+echo "  手動起動:"
+echo "    uv run $SCRIPT_DIR/erasers_task_controller_server.py --config /path/to/config"
 echo ""

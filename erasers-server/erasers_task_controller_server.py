@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+# /// script
+# requires-python = ">=3.10"
+# dependencies = [
+#   "fastapi",
+#   "uvicorn[standard]",
+#   "pydantic",
+#   "lupa",
+# ]
+# ///
 
 import os
 import sys
