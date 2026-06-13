@@ -70,6 +70,7 @@ case "$svc_answer" in
     UV_PATH="$(command -v uv)"
     sed \
       -e "s|ExecStart=.*erasers_task_controller_server\.py|ExecStart=$UV_PATH run $SCRIPT_DIR/erasers_task_controller_server.py|" \
+      -e "s|User=.*|User=$USER|" \
       "$SERVICE_SRC" | sudo tee "$SERVICE_DST" > /dev/null
 
     sudo systemctl daemon-reload
