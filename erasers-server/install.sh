@@ -58,9 +58,9 @@ echo "完了"
 echo ""
 
 # ------------------------------------------------------------
-# 3. systemd システムサービスをインストール
+# 3. systemd ユーザーサービスをインストール
 # ------------------------------------------------------------
-echo "--- [3/3] systemd サービスをインストールしますか？ ---"
+echo "--- [3/3] systemd ユーザーサービスをインストールしますか？ ---"
 read -p "  Task Controller Server をサービス化しますか？ [y/N]: " svc_answer
 case "$svc_answer" in
   [yY] | [yY][eE][sS])
@@ -71,19 +71,27 @@ case "$svc_answer" in
     fi
 
     SERVICE_SRC="$SCRIPT_DIR/erasers-task-controller-server.service"
-    SERVICE_DST="/etc/systemd/system/erasers-task-controller-server.service"
+    SERVICE_DIR="$HOME/.config/systemd/user"
+    SERVICE_DST="$SERVICE_DIR/erasers-task-controller-server.service"
+
+    mkdir -p "$SERVICE_DIR"
 
     UV_PATH="$(command -v uv)"
     sed \
       -e "s|ExecStart=.*erasers_task_controller_server\.py.*|ExecStart=$UV_PATH run $SCRIPT_DIR/erasers_task_controller_server.py --config $config_path|" \
-      -e "s|User=.*|User=$USER|" \
-      "$SERVICE_SRC" | sudo tee "$SERVICE_DST" > /dev/null
+      "$SERVICE_SRC" > "$SERVICE_DST"
 
-    sudo systemctl daemon-reload
-    sudo systemctl enable erasers-task-controller-server
+    systemctl --user daemon-reload
+    systemctl --user enable erasers-task-controller-server
     echo "完了 (サービス名: erasers-task-controller-server)"
-    echo "  起動: sudo systemctl start erasers-task-controller-server"
-    echo "  ログ: journalctl -u erasers-task-controller-server -f"
+    echo "  起動: systemctl --user start erasers-task-controller-server"
+    echo "  ログ: journalctl --user -u erasers-task-controller-server -f"
+
+    AUTOSTART_DIR="$HOME/.config/autostart"
+    mkdir -p "$AUTOSTART_DIR"
+    cp "$SCRIPT_DIR/erasers-task-controller-server-autostart.desktop" \
+       "$AUTOSTART_DIR/erasers-task-controller-server.desktop"
+    echo "完了 (自動起動: $AUTOSTART_DIR/erasers-task-controller-server.desktop)"
     ;;
   *)
     echo "スキップしました。"

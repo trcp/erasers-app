@@ -72,7 +72,16 @@ class NodeData:
         terminal_mode = opt.get("terminal", False)
 
         env["ROS_MASTER_URI"] = rm_uri
+
+        # TODO: ROS_IP is currently set by referencing NETWORK_IF in .bashrc inside the Docker container.
+        #       We should eventually consolidate this logic into a single place.
+        env["NETWORK_IF"] = self.network_if
         env["ROS_IP"] = ros_ip
+
+        print(f"[if you are ROS1]: ROS_IP         -> {ros_ip}")
+        print(f"[if you are ROS1]: ROS_MASTER_URI -> {ros_master_uri}")
+        print(f"[if you are ROS1]: NETWORK_IF     -> {self.network_if}")
+
         if terminal_mode:
             cmd = ["wezterm", "start", "--", "bash", "-c", f"{formatted_cmd}; exec bash"]
         else:

@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=Erasers Task Controller Server
+Exec=systemctl --user start erasers-task-controller-server
+Type=Application
+NoDisplay=true
+Terminal=false
+X-GNOME-Autostart-enabled=true

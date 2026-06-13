@@ -4,11 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=roboworks
-ExecStart=/usr/local/bin/uv run /home/roboworks/work/erasers-app/erasers-server/erasers_task_controller_server.py --config /home/roboworks/erasers_ws/tasks
+ExecStart=/usr/local/bin/uv run /path/to/erasers_task_controller_server.py --config /path/to/config
 Restart=on-failure
 RestartSec=5
-# Environment=PYTHONPATH=INSTALL_PYTHONPATH
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
