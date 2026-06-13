@@ -22,7 +22,7 @@ Docker コンテナとして port 3000 で提供される。
 ### インストール（ロボット側）
 
 ```bash
-ssh unitree@<robot_ip>
+ssh <robot_user>@<robot_ip>
 git clone https://github.com/trcp/erasers-app.git
 cd ~/erasers-app/erasers-gui && ./install.sh
 ```
