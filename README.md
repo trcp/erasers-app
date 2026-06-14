@@ -43,14 +43,14 @@ http://<robot_ip>:3000
 
 ### 画面一覧
 
-URL ルーティングは使用せず、画面内のナビゲーションで切り替える SPA 構成。
+URL ルーティングは使用せず、左上のメニューボタンでドロワーを開いて画面を切り替える SPA 構成。
 
 | 画面 | 説明 |
 |------|------|
 | 発話モニター | ロボットの発話トピックを受信して表示。発話履歴と発話オーバーレイ |
-| 遠隔操作 | タッチ / マウスジョイスティックおよびゲームパッドで `/cmd_vel` をパブリッシュ。操作モード切替 |
+| 遠隔操作 | タッチ / マウスジョイスティックおよびゲームパッドで `/cmd_vel` をパブリッシュ。操作モードボタンから ROS サービス / トピックパブリッシュ / アクションゴールを送信 |
 | マップ | ros3d で `/map` トピックの 2D 占有格子地図を表示。ロボット自己位置を重ねて描画 |
-| タスク管理 | erasers-server と連携してタスクの起動・停止・ログ確認を行う |
+| タスク | erasers-server と連携してタスクの起動・停止・ログ確認を行う |
 | 設定 | rosbridge 接続先・ロボット種別プリセット・遠隔 PC の管理 |
 
 ### rosbridge 接続
@@ -72,7 +72,9 @@ rosbridge_server（デフォルト port 9090）への WebSocket 接続でトピ�
 | ロボット自己位置 | `/amcl_pose` · `geometry_msgs/PoseWithCovarianceStamped` |
 | 初期自己位置 | `/initialpose` · `geometry_msgs/PoseWithCovarianceStamped` |
 
-プリセットは JSON ファイルとしてエクスポート / インポートできる。
+さらに**操作モードプリセット**（`modeGroups`）を設定できる。モードボタンに ROS サービス呼び出し・トピックパブリッシュ・アクションゴール送信のいずれかのアクションを割り当て、遠隔操作画面に表示する。
+
+ロボット種別は自由に追加・削除・リネームでき、プリセット設定は JSON ファイルとしてエクスポート / インポートできる。
 
 ### ゲームパッド操作
 
@@ -100,7 +102,7 @@ cd erasers-app/erasers-server && ./install.sh
 
 1. `uv` のインストール確認（未インストールの場合はエラーで終了）
 2. スクリプトへの実行権限付与
-3. `erasers-task-controller-server` を systemd サービスとして登録（任意・タスク設定ディレクトリのパスを入力）
+3. `erasers-task-controller-server` を systemd **ユーザー**サービスとして登録（任意・タスク設定ディレクトリのパスを入力）。登録するとログイン時に自動起動する
 
 `uv` が未インストールの場合は以下を参照してインストールしてください：  
 https://docs.astral.sh/uv/getting-started/installation/
@@ -115,11 +117,11 @@ https://docs.astral.sh/uv/getting-started/installation/
 | メソッド | パス | 説明 |
 |----------|------|------|
 | GET | `/get_task` | 全タスク一覧を取得 |
-| POST | `/run_task/{task}/{node}` | タスクを起動 |
-| POST | `/kill_task/{task}/{node}` | タスクを停止 |
-| GET | `/task_running/{task}/{node}` | タスクの実行状態を確認 |
-| WS | `/ws/{task}/{node}` | タスクのログをリアルタイムストリーム |
-| POST | `/set_time/{task}/{node}` | 開始時刻変数を設定 |
+| POST | `/run_task/{task_name}/{node_name}` | タスクを起動 |
+| POST | `/kill_task/{task_name}/{node_name}` | タスクを停止 |
+| GET | `/task_running/{task_name}/{node_name}` | タスクの実行状態を確認 |
+| WS | `/ws/{task_name}/{node_name}` | タスクのログをリアルタイムストリーム |
+| POST | `/set_time/{task_name}/{node_name}` | 開始時刻変数を設定 |
 | GET | `/get_xml` | XML ファイルの取得 |
 | POST | `/save_xml` | XML ファイルの保存 |
 | GET | `/get_network_interfaces` | ネットワークインターフェース一覧を取得 |
@@ -130,7 +132,7 @@ https://docs.astral.sh/uv/getting-started/installation/
 
 1. ブラウザで erasers-gui の **設定** 画面を開く
 2. **遠隔 PC 管理** に PC の名前と IP アドレスを登録
-3. **タスク管理** 画面で対象 PC を選択し、タスク一覧を取得
+3. **タスク** 画面で対象 PC を選択し、タスク一覧を取得
 4. 起動したいプログラムの「起動」ボタンをクリック
 5. ログは「ログ」ボタンで WebSocket 経由にリアルタイム表示
 
@@ -152,5 +154,5 @@ uv run erasers_task_controller_server.py --config /path/to/config
 ```bash
 tail -f /tmp/erasers_server.log
 # または systemd サービスを使用している場合
-journalctl -u erasers-task-controller-server -f
+journalctl --user -u erasers-task-controller-server -f
 ```
