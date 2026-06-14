@@ -1,6 +1,12 @@
 [Unit]
 Description=Erasers Task Controller Server
-After=network.target
+# After=network.target
+After=graphical-session.target
+BindsTo=graphical-session.target
+PartOf=graphical-session.target
+Requisite=graphical-session.target
+ConditionEnvironment=DISPLAY
+ConditionEnvironment=XAHTHORITY
 
 [Service]
 Type=simple
@@ -9,4 +15,5 @@ Restart=on-failure
 RestartSec=5
 
 [Install]
-WantedBy=default.target
+# WantedBy=default.target
+WantedBy=graphical-session.target

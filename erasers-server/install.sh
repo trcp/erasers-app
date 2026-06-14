@@ -81,8 +81,8 @@ case "$svc_answer" in
       -e "s|ExecStart=.*erasers_task_controller_server\.py.*|ExecStart=$UV_PATH run $SCRIPT_DIR/erasers_task_controller_server.py --config $config_path|" \
       "$SERVICE_SRC" > "$SERVICE_DST"
 
-    systemctl --user daemon-reload
-    systemctl --user enable erasers-task-controller-server
+    # systemctl --user daemon-reload
+    # systemctl --user enable erasers-task-controller-server
     echo "完了 (サービス名: erasers-task-controller-server)"
     echo "  起動: systemctl --user start erasers-task-controller-server"
     echo "  ログ: journalctl --user -u erasers-task-controller-server -f"
