@@ -49,6 +49,8 @@ export function AppProvider({ children }) {
 
   const [utterances, setUtterances] = useState([])
   const [overlayUtterance, setOverlayUtterance] = useState(null)
+  const [overlayImage, setOverlayImage] = useState(null)
+  const [imageViewerTopic, setImageViewerTopic] = useState('')
   const [emergencyStop, setEmergencyStop] = useState(null)
 
   useEffect(() => {
@@ -57,6 +59,13 @@ export function AppProvider({ children }) {
     window.addEventListener("keydown", k)
     return () => window.removeEventListener("keydown", k)
   }, [overlayUtterance])
+
+  useEffect(() => {
+    if (!overlayImage) return
+    const k = (e) => e.key === "Escape" && setOverlayImage(null)
+    window.addEventListener("keydown", k)
+    return () => window.removeEventListener("keydown", k)
+  }, [overlayImage])
 
   useEffect(() => {
     if (!emergencyStop || emergencyStop.dismissed) return
@@ -112,6 +121,7 @@ export function AppProvider({ children }) {
       }))
     }
   }, [tweaks.robotType])
+
 
   const [rosConfigs, setRosConfigs] = useState(() => {
     try {
@@ -239,6 +249,8 @@ export function AppProvider({ children }) {
     waypoints, setWaypoints,
     utterances, setUtterances,
     overlayUtterance, setOverlayUtterance,
+    overlayImage, setOverlayImage,
+    imageViewerTopic, setImageViewerTopic,
     emergencyStop, setEmergencyStop,
     pcs, setPcs,
     activePc, setActivePc,

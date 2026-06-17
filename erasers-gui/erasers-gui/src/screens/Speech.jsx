@@ -23,7 +23,7 @@ function Section({ title, sub, tools, children, style }) {
 }
 
 export function Speech({ utterances, pcName, onReplay }) {
-  const { activePreset } = useAppContext()
+  const { activePreset, imageViewerTopic } = useAppContext()
   const speechTopic = activePreset?.speech?.topic ?? '/robot/speech'
 
   const latest = utterances[0]
@@ -60,6 +60,12 @@ export function Speech({ utterances, pcName, onReplay }) {
           <I.speech size={12} />
           新しい発話が到着すると、画面全体に 10秒間 表示されます
         </div>
+        {imageViewerTopic ? (
+          <div className="utt-hint">
+            <span className="utt-led speaking" />
+            画像サブスクライブ中: <span className="mono">{imageViewerTopic}</span>
+          </div>
+        ) : null}
       </div>
 
       <Section title="発話履歴" sub={`${utterances.length} ENTRIES`}>
@@ -84,6 +90,29 @@ export function Speech({ utterances, pcName, onReplay }) {
           </div>
         )}
       </Section>
+    </div>
+  )
+}
+
+export function ImageOverlay({ image, onClose }) {
+  return (
+    <div className="utt-overlay" onClick={onClose}>
+      <div className="img-overlay-card" onClick={e => e.stopPropagation()}>
+        <div className="utt-overlay-head">
+          <div className="utt-overlay-avatar">
+            <I.map size={28} />
+          </div>
+          <div className="utt-overlay-meta">
+            <div className="utt-overlay-label"><span className="utt-led speaking" /> 画像表示</div>
+            <div className="utt-overlay-time mono">{image.time.toLocaleTimeString("ja-JP", { hour12: false })}</div>
+          </div>
+          <button className="icon-btn bordered" onClick={onClose}><I.x size={16} /></button>
+        </div>
+        <div className="img-overlay-body">
+          <img src={image.dataUrl} alt="display" className="img-overlay-img" />
+        </div>
+        <div className="utt-overlay-hint">クリック / ESC で閉じる</div>
+      </div>
     </div>
   )
 }

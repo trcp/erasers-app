@@ -3,7 +3,7 @@ import { AppProvider, useAppContext } from './context/AppContext'
 import { RosProvider, useRos } from './context/RosContext'
 import { useRosTopic } from './hooks/useRosTopic'
 import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakSelect } from './components/TweaksPanel'
-import { Speech, UtteranceOverlay } from './screens/Speech'
+import { Speech, UtteranceOverlay, ImageOverlay } from './screens/Speech'
 import { Remote } from './screens/Remote'
 import { MapScreen } from './screens/MapScreen'
 import { Tasks } from './screens/Tasks'
@@ -272,24 +272,31 @@ function GlobalGamepad() {
 }
 
 function RosSync() {
-  const { setTelemetry, setUtterances, setOverlayUtterance, setEmergencyStop, screen, activePreset } = useAppContext()
+  const { setTelemetry, setUtterances, setOverlayUtterance, setOverlayImage, setImageViewerTopic, imageViewerTopic, setEmergencyStop, screen, activePreset } = useAppContext()
   const screenRef = useRef(screen)
   useEffect(() => { screenRef.current = screen }, [screen])
 
-  const speechTopic        = activePreset?.speech?.topic          ?? '/robot/speech'
-  const speechMsgType      = activePreset?.speech?.msgType        ?? 'std_msgs/String'
-  const batteryTopic       = activePreset?.battery?.topic         ?? '/battery_state'
-  const batteryMsgType     = activePreset?.battery?.msgType       ?? 'sensor_msgs/BatteryState'
-  const emergencyTopic     = activePreset?.emergencyStop?.topic   ?? '/emergency_stop'
-  const emergencyMsgType   = activePreset?.emergencyStop?.msgType ?? 'std_msgs/Bool'
+  const speechTopic      = activePreset?.speech?.topic          ?? '/robot/speech'
+  const speechMsgType    = activePreset?.speech?.msgType        ?? 'std_msgs/String'
+  const batteryTopic     = activePreset?.battery?.topic         ?? '/battery_state'
+  const batteryMsgType   = activePreset?.battery?.msgType       ?? 'sensor_msgs/BatteryState'
+  const emergencyTopic   = activePreset?.emergencyStop?.topic   ?? '/emergency_stop'
+  const emergencyMsgType = activePreset?.emergencyStop?.msgType ?? 'std_msgs/Bool'
+  const imageTopic       = activePreset?.image?.topic           ?? '/display_image'
+  const imageMsgType     = activePreset?.image?.msgType         ?? 'sensor_msgs/CompressedImage'
 
-  const { message: battMsg }      = useRosTopic(batteryTopic, batteryMsgType)
+  const { message: battMsg }      = useRosTopic(batteryTopic,     batteryMsgType)
+  // 画像ビューア制御トピック: 購読先トピック名を受け取る (std_msgs/String)
+  const { message: viewerCtrlMsg } = useRosTopic('/image_viewer_topic', 'std_msgs/String')
+  // 制御トピックで指定された画像トピックを動的購読 (100ms スロットル)
+  const { message: viewerImageMsg } = useRosTopic(imageViewerTopic, 'sensor_msgs/CompressedImage', 'subscribe', 100, !!imageViewerTopic)
   const { message: odomMsg }      = useRosTopic('/odom', 'nav_msgs/Odometry', 'subscribe', 100)
   const { message: tempMsg }      = useRosTopic('/temperature', 'sensor_msgs/Temperature')
   const { message: cpuMsg }       = useRosTopic('/cpu_usage', 'std_msgs/Float64')
   const { message: wifiMsg }      = useRosTopic('/wifi_signal', 'std_msgs/Int32')
   const { message: speechMsg }    = useRosTopic(speechTopic, speechMsgType)
   const { message: emergencyMsg } = useRosTopic(emergencyTopic, emergencyMsgType)
+  const { message: imageMsg }     = useRosTopic(imageTopic, imageMsgType, 'subscribe', 100)
 
   useEffect(() => {
     if (battMsg == null) return
@@ -337,6 +344,34 @@ function RosSync() {
   }, [speechMsg])
 
   useEffect(() => {
+    if (!imageMsg) return
+    if (!imageMsg.data || imageMsg.data.length === 0) {
+      setOverlayImage(null)
+      return
+    }
+    const format = imageMsg.format || 'jpeg'
+    const dataUrl = `data:image/${format};base64,${imageMsg.data}`
+    // id を維持することでモーダルを再アニメーションさせずフレームだけ更新する
+    setOverlayImage(prev => ({ id: prev?.id ?? Date.now() + Math.random(), dataUrl, time: new Date() }))
+  }, [imageMsg])
+
+  // 制御トピックにトピック名が届いたら動的購読先を切り替える
+  useEffect(() => {
+    if (!viewerCtrlMsg) return
+    const topic = (viewerCtrlMsg.data ?? '').trim()
+    setImageViewerTopic(topic)
+    setOverlayImage(null)   // トピック切り替え時に前の画像をクリア
+  }, [viewerCtrlMsg])
+
+  // 動的購読トピックから画像が届いたらモーダルに反映
+  useEffect(() => {
+    if (!viewerImageMsg?.data) return
+    const format = viewerImageMsg.format || 'jpeg'
+    const dataUrl = `data:image/${format};base64,${viewerImageMsg.data}`
+    setOverlayImage(prev => ({ id: prev?.id ?? Date.now() + Math.random(), dataUrl, time: new Date() }))
+  }, [viewerImageMsg])
+
+  useEffect(() => {
     if (emergencyMsg == null) return
     if (emergencyMsg.data) {
       // dismissed 済みなら再表示しない（false → true の遷移を待つ）
@@ -382,6 +417,7 @@ function AppShell() {
     telemetry, controls, setControls,
     mode, setMode, waypoints, setWaypoints,
     utterances, setUtterances, overlayUtterance, setOverlayUtterance,
+    overlayImage, setOverlayImage,
     emergencyStop, setEmergencyStop,
     pcs, setPcs, activePc, setActivePc,
     rosbridge, setRosbridge,
@@ -413,6 +449,9 @@ function AppShell() {
       <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} />
       {overlayUtterance && screen === "speech" && (
         <UtteranceOverlay utterance={overlayUtterance} onClose={() => setOverlayUtterance(null)} />
+      )}
+      {overlayImage && screen === "speech" && (
+        <ImageOverlay image={overlayImage} onClose={() => setOverlayImage(null)} />
       )}
       {emergencyStop && !emergencyStop.dismissed && (
         <EmergencyOverlay emergencyStop={emergencyStop} onClose={() => setEmergencyStop(prev => prev ? { ...prev, dismissed: true } : null)} />

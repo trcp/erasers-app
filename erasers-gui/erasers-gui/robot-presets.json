@@ -4,6 +4,10 @@
       "topic": "/talking_sentencecccc",
       "msgType": "std_msgs/String"
     },
+    "image": {
+      "topic": "/display_image",
+      "msgType": "sensor_msgs/CompressedImage"
+    },
     "modeGroups": [
       {
         "group": "Robot Pose",
@@ -64,6 +68,10 @@
     "speech": {
       "topic": "/robot/speech",
       "msgType": "std_msgs/String"
+    },
+    "image": {
+      "topic": "/display_image",
+      "msgType": "sensor_msgs/CompressedImage"
     },
     "modeGroups": [
       {
