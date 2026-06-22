@@ -6,7 +6,6 @@ import { TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakSelect } from '
 import { Speech, UtteranceOverlay, ImageOverlay } from './screens/Speech'
 import { Remote } from './screens/Remote'
 import { MapScreen } from './screens/MapScreen'
-import { LocationsEditor } from './screens/LocationsEditor'
 import { Tasks } from './screens/Tasks'
 import { Settings } from './screens/Settings'
 import { ROBOT_TYPES, ACCENTS, applyTokens } from './constants/theme'
@@ -16,7 +15,6 @@ const NAV = [
   { id: "speech",   label: "発話モニター", icon: I.speech,   group: "main" },
   { id: "remote",   label: "遠隔操作",     icon: I.joystick, group: "main" },
   { id: "map",      label: "マップ",       icon: I.map,      group: "main" },
-  { id: "locations", label: "ロケーション編集", icon: I.pin,   group: "main" },
   { id: "tasks",    label: "タスク",       icon: I.tasks,    group: "main" },
   { id: "settings", label: "設定",         icon: I.settings, group: "system" },
 ]
@@ -436,8 +434,7 @@ function AppShell() {
   let body
   if (screen === "speech")        body = <Speech utterances={utterances} pcName={activePcName} onReplay={setOverlayUtterance} />
   else if (screen === "remote")   body = <Remote telemetry={telemetry} controls={controls} setControls={setControls} topics={topics} setTopics={setTopics} rosbridgeUrl={`${rosbridge.ssl ? "wss" : "ws"}://${rosbridge.host}:${rosbridge.port}`} pcName={activePcName} robotType={tweaks.robotType} mode={mode} setMode={setMode} />
-  else if (screen === "map")      body = <MapScreen />
-  else if (screen === "locations") body = <LocationsEditor pcs={pcs} activePc={activePc} setActivePc={setActivePc} />
+  else if (screen === "map")      body = <MapScreen pcs={pcs} activePc={activePc} setActivePc={setActivePc} />
   else if (screen === "tasks")    body = <Tasks runningTasks={runningTasks} setRunningTasks={setRunningTasks} pcs={pcs} activePc={activePc} setActivePc={setActivePc} />
   else if (screen === "settings") body = <Settings controls={controls} setControls={setControls} rosbridge={rosbridge} setRosbridge={setRosbridge} pcs={pcs} setPcs={setPcs} activePc={activePc} setActivePc={setActivePc} robotType={tweaks.robotType} setRobotType={v => setTweak("robotType", v)} />
 

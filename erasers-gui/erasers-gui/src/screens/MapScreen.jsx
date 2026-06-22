@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import ROSLIB from 'roslib'
 import { useRos } from '../context/RosContext.jsx'
 import { useAppContext } from '../context/AppContext.jsx'
+import { LocationsEditor } from './LocationsEditor.jsx'
+import I from '../icons.jsx'
 
 // ros3d.js は window.ROSLIB に依存するグローバルスクリプト。
 // 初回マウント時に window.ROSLIB を設定してから /ros3d.js を動的ロードする。
@@ -44,13 +46,14 @@ function fitCameraToGrid(grid, viewer) {
   viewer.cameraControls.center.set(cx, cy, 0)
 }
 
-export function MapScreen() {
+export function MapScreen({ pcs, activePc, setActivePc }) {
   const { ros, status } = useRos()
   const { activePreset } = useAppContext()
   const containerRef    = useRef(null)
   const instanceRef     = useRef(null)
   const fittedRef       = useRef(false)
   const [mapStatus, setMapStatus] = useState('waiting')
+  const [mapTab, setMapTab]       = useState('map')
 
   const [poseMode, setPoseMode]   = useState(false)
   const poseModeRef     = useRef(false)
@@ -337,56 +340,79 @@ export function MapScreen() {
         <div>
           <h2 className="page-title">マップ</h2>
           <div className="page-sub">
-            {mapTopic}
-            <span style={{
-              marginLeft: 10,
-              color: mapStatus === 'received' ? 'var(--accent)' : 'var(--ink-3)',
-              fontFamily: 'var(--mono)',
-            }}>
-              {mapStatus === 'received' ? '● 受信済み' : '○ 受信待ち'}
-            </span>
+            {mapTab === 'map' ? (
+              <>
+                {mapTopic}
+                <span style={{
+                  marginLeft: 10,
+                  color: mapStatus === 'received' ? 'var(--accent)' : 'var(--ink-3)',
+                  fontFamily: 'var(--mono)',
+                }}>
+                  {mapStatus === 'received' ? '● 受信済み' : '○ 受信待ち'}
+                </span>
+              </>
+            ) : 'LOCATIONS_XML_EDITOR'}
           </div>
         </div>
         <div className="page-tools">
-          {robotPos && (
-            <span style={{
-              fontFamily: 'var(--mono)',
-              fontSize: 13,
-              color: paused ? 'var(--ink-3)' : 'var(--ink-1)',
-            }}>
-              <span style={{ opacity: 0.6, marginRight: 3 }}>X</span>{robotPos.x.toFixed(3)}
-              <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>Y</span>{robotPos.y.toFixed(3)}
-              <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>θ</span>{robotPos.angle.toFixed(3)} rad
-            </span>
+          {mapTab === 'map' && (
+            <>
+              {robotPos && (
+                <span style={{
+                  fontFamily: 'var(--mono)',
+                  fontSize: 13,
+                  color: paused ? 'var(--ink-3)' : 'var(--ink-1)',
+                }}>
+                  <span style={{ opacity: 0.6, marginRight: 3 }}>X</span>{robotPos.x.toFixed(3)}
+                  <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>Y</span>{robotPos.y.toFixed(3)}
+                  <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>θ</span>{robotPos.angle.toFixed(3)} rad
+                </span>
+              )}
+              <button
+                className={`btn${paused ? ' accent' : ''}`}
+                disabled={status !== 'connected'}
+                onClick={() => setPaused(p => !p)}
+              >
+                {paused ? '▶ 再開' : '■ 停止'}
+              </button>
+              <button
+                className={`btn${poseMode ? ' accent' : ''}`}
+                disabled={status !== 'connected' || !instanceRef.current}
+                onClick={() => {
+                  const next = !poseMode
+                  setPoseMode(next)
+                  poseModeRef.current = next
+                  if (instanceRef.current) {
+                    containerRef.current.style.cursor = next ? 'crosshair' : ''
+                    if (!next) {
+                      instanceRef.current.previewArrow.visible = false
+                      poseDragRef.current = null
+                    }
+                  }
+                }}
+              >
+                {poseMode ? '● 位置設定中...' : '初期位置設定'}
+              </button>
+            </>
           )}
-          <button
-            className={`btn${paused ? ' accent' : ''}`}
-            disabled={status !== 'connected'}
-            onClick={() => setPaused(p => !p)}
-          >
-            {paused ? '▶ 再開' : '■ 停止'}
-          </button>
-          <button
-            className={`btn${poseMode ? ' accent' : ''}`}
-            disabled={status !== 'connected' || !instanceRef.current}
-            onClick={() => {
-              const next = !poseMode
-              setPoseMode(next)
-              poseModeRef.current = next
-              if (instanceRef.current) {
-                containerRef.current.style.cursor = next ? 'crosshair' : ''
-                if (!next) {
-                  instanceRef.current.previewArrow.visible = false
-                  poseDragRef.current = null
-                }
-              }
-            }}
-          >
-            {poseMode ? '● 位置設定中...' : '初期位置設定'}
-          </button>
+          <div style={{ display: 'flex', gap: 2, border: '1px solid var(--border)', borderRadius: 6, padding: 2 }}>
+            <button
+              className={`btn sm${mapTab === 'map' ? ' accent' : ''}`}
+              onClick={() => setMapTab('map')}
+            >
+              <I.map size={11} /> マップ
+            </button>
+            <button
+              className={`btn sm${mapTab === 'locations' ? ' accent' : ''}`}
+              onClick={() => setMapTab('locations')}
+            >
+              <I.pin size={11} /> ロケーション
+            </button>
+          </div>
         </div>
       </div>
-      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+
+      <div style={{ flex: 1, minHeight: 0, position: 'relative', display: mapTab === 'map' ? 'block' : 'none' }}>
         <div
           ref={containerRef}
           style={{
@@ -398,6 +424,12 @@ export function MapScreen() {
           }}
         />
       </div>
+
+      {mapTab === 'locations' && (
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+          <LocationsEditor pcs={pcs} activePc={activePc} setActivePc={setActivePc} embedded />
+        </div>
+      )}
     </div>
   )
 }
