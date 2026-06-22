@@ -1,0 +1,49 @@
+<?xml version='1.0' encoding='utf-8'?>
+<locations>
+    <room name="living_room" position="0.0 0.0 0.0 0.0">
+        <location name="living_room_center" global_position="4.84 -2.28 0.0 0.7" put_position="0 0 0" isDoor="false" />
+        <location name="tv_table_right" global_position="5.02 -1.41 0.7433845911723039 3.08" put_position="0 0 0" isDoor="false" />
+        <location name="tv_table_left" global_position="4.93 -2.13 0.7433845911723039 3.07" put_position="0 0 0" isDoor="false" />
+        <location name="tv_table" global_position="4.97 -1.79 0.7400277002655526 3.09" put_position="0 0 0" isDoor="false" />
+        <location name="coffee_table_right" global_position="6.72 -1.35 0.48001809653384697 -0.05" put_position="0 0 0" isDoor="false" />
+        <location name="coffee_table_left" global_position="7.84 -0.28 0.4850618153844254 -1.63" put_position="0 0 0" isDoor="false" />
+        <location name="coffee_table" global_position="7.3 -0.44 0.48273848695842947 -1.06" put_position="0 0 0" isDoor="false" />
+        <location name="couch" global_position="8.04 -0.35 0.46881014841420254 -0.8" put_position="0 0 0" isDoor="false" />
+        <location name="lounge_chair" global_position="6.59 -2.14 0.4420627269716806 -0.12" put_position="0 0 0" isDoor="false" />
+        <location name="lamp" global_position="6.92 -1.38 0.0 -0.52" put_position="0 0 0" isDoor="false" />
+    </room>
+
+    <room name="kitchen" position="0.0 0.0 0.0 0.0">
+        <location name="kitchen_center" global_position="8.5 1.64 0.010530906087632075 2.48" put_position="0 0 0" isDoor="false" />
+        <location name="trashcan" global_position="5.08 1.57 0.6305964791144136 -2.68" put_position="0 0 0" isDoor="false" />
+        <location name="dinner_table_right" global_position="7.47 3.8 0.77718578159509 3.11" put_position="0 0 0" isDoor="false" />
+        <location name="dinner_table_left" global_position="5.46 4.04 0.77718578159509 -0.01" put_position="0 0 0" isDoor="false" />
+        <location name="dinner_table_near_side" global_position="6.4 2.31 0.77718578159509 1.63" put_position="0 0 0" isDoor="false" />
+        <location name="dinner_table_far_side" global_position="6.47 5.32 0.777 -1.5892284197379776" put_position="0 0 0" isDoor="false" />
+        <location name="kitchen_cabinet_top" global_position="5.14 5.0 0.7294876908881736 3.12" put_position="0 0 0" isDoor="false" />
+        <location name="kitchen_cabinet_middle" global_position="5.11 5.02 0.4088280875074861 -3.14" put_position="0 0 0" isDoor="false" />
+        <location name="kitchen_cabinet_bottom" global_position="5.11 5.02 0.09264206385378915 -3.14" put_position="0 0 0" isDoor="false" />
+        <location name="dishwasher" global_position="7.98 3.7 0.0 0.06" put_position="0 0 0" isDoor="false" />
+        <location name="kitchen_counter_right" global_position="8.23 4.34 0.916594755722155 0.01" put_position="0 0 0" isDoor="false" />
+        <location name="kitchen_counter_left" global_position="8.22 5.32 0.9159143662010484 0.03" put_position="0 0 0" isDoor="false" />
+        <location name="kitchen_counter" global_position="8.22 4.87 0.9209456541714494 0.01" put_position="0 0 0" isDoor="false" />
+    </room>
+
+    <room name="hallway" position="0.0 0.0 0.0 0.0">
+        <location name="hallway_center" global_position="3.35 -0.53 -0.009850756108937153 -3.1" put_position="0 0 0" isDoor="false" />
+        <location name="hallway_cabinet_top" global_position="1.32 -1.62 0.8006721089319544 3.09" put_position="0 0 0" isDoor="false" />
+        <location name="entrance_in_room" global_position="1.69 -0.08 0.42959652919440294 -0.02" put_position="0 0 0" isDoor="true" />
+        <location name="coathanger" global_position="2.22 -0.35 0.6680874019170354 1.49" put_position="0 0 0" isDoor="false" />
+    </room>
+
+    <room name="office" position="0.0 0.0 0.0 0.0">
+        <location name="office_center" global_position="3.47 1.88 -0.019549397920499922 2.3" put_position="0 0 0" isDoor="false" />
+        <location name="desk_left" global_position="2.59 2.42 0.7367173972061728 -1.65" put_position="0 0 0" isDoor="false" />
+        <location name="desk_right" global_position="1.26 2.55 0.745631986412743 -1.57" put_position="0 0 0" isDoor="false" />
+        <location name="desk" global_position="1.8 2.81 0.7445474670419325 -1.52" put_position="0 0 0" isDoor="false" />
+        <location name="shelf_top" global_position="1.6 3.96 0.992774455275572 -3.13" put_position="0 0 0" isDoor="false" />
+        <location name="shelf_middle" global_position="1.6 3.96 0.5550607932694221 -3.13" put_position="0 0 0" isDoor="false" />
+        <location name="shelf_bottom" global_position="1.6 3.96 0.12645731324420706 -3.13" put_position="0 0 0" isDoor="false" />
+        <location name="exit_in_room" global_position="3.47 4.43 0.007622893277574372 1.59" put_position="0 0 0" isDoor="true" />
+    </room>
+</locations>

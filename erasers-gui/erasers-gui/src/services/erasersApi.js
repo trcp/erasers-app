@@ -59,6 +59,22 @@ export async function getTaskStatus(baseUrl, taskName, nodeName) {
   return res.json()
 }
 
+export async function getXml(baseUrl, path) {
+  const res = await fetch(`${baseUrl}/get_xml?path=${encodeURIComponent(path)}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.text()
+}
+
+export async function saveXml(baseUrl, path, content) {
+  const res = await fetch(`${baseUrl}/save_xml?path=${encodeURIComponent(path)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 export async function fetchNetworkInterfaces(baseUrl) {
   const res = await fetch(`${baseUrl}/get_network_interfaces`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
