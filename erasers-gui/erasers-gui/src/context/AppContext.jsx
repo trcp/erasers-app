@@ -13,6 +13,15 @@ const TWEAK_DEFAULTS = {
 
 const DEFAULT_CONTROLS = { maxSpeed: 1.2, maxRot: 90, accel: 1.0 }
 
+// ロケーション編集の永続化データ（erasers.locations）から 1 フィールドを読み出す
+function readLoc(key, fallback) {
+  try {
+    const stored = JSON.parse(localStorage.getItem('erasers.locations'))
+    if (stored && typeof stored === 'object' && key in stored) return stored[key]
+  } catch { /* ignore */ }
+  return fallback
+}
+
 export function AppProvider({ children }) {
   const [tweaks, setTweak] = useTweaks(TWEAK_DEFAULTS)
   const [screen, setScreen]   = useState("speech")
@@ -239,6 +248,22 @@ export function AppProvider({ children }) {
 
   const activePreset = robotPresets[tweaks.robotType] ?? defaultPresets[tweaks.robotType]
 
+  // ── ロケーション編集の状態 ──
+  // ページ移動だけでなくリロードもまたいで保持するため localStorage に永続化する
+  const [locRooms, setLocRooms]               = useState(() => readLoc('rooms', null))
+  const [locRawText, setLocRawText]           = useState(() => readLoc('rawText', ""))
+  const [locSourceMode, setLocSourceMode]     = useState(() => readLoc('sourceMode', null)) // null=未初期化（初回マウント時にPC有無で決定）
+  const [locPath, setLocPath]                 = useState(() => readLoc('path', ""))
+  const [locFileName, setLocFileName]         = useState(() => readLoc('fileName', ""))
+  const [locCollapsed, setLocCollapsed]       = useState(() => readLoc('collapsed', {}))
+
+  useEffect(() => {
+    localStorage.setItem('erasers.locations', JSON.stringify({
+      rooms: locRooms, rawText: locRawText, sourceMode: locSourceMode,
+      path: locPath, fileName: locFileName, collapsed: locCollapsed,
+    }))
+  }, [locRooms, locRawText, locSourceMode, locPath, locFileName, locCollapsed])
+
   const value = {
     tweaks, setTweak,
     screen, setScreen,
@@ -264,6 +289,12 @@ export function AppProvider({ children }) {
     gamepadName, setGamepadName,
     gamepadJoy, setGamepadJoy,
     gamepadLbPressed, setGamepadLbPressed,
+    locRooms, setLocRooms,
+    locRawText, setLocRawText,
+    locSourceMode, setLocSourceMode,
+    locPath, setLocPath,
+    locFileName, setLocFileName,
+    locCollapsed, setLocCollapsed,
   }
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>

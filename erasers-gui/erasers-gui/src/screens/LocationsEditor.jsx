@@ -22,17 +22,26 @@ function Section({ title, sub, tools, children, style }) {
 const emptyLocation = () => ({ name: "", global_position: "0 0 0 0", put_position: "0 0 0", isDoor: false })
 const emptyRoom = () => ({ name: "", position: "0.0 0.0 0.0 0.0", locations: [] })
 
-export function LocationsEditor({ pcs, activePc, setActivePc, embedded = false }) {
-  const [sourceMode, setSourceMode] = useState(pcs.length > 0 ? 'server' : 'local')
-  const [path, setPath]             = useState(DEFAULT_XML_PATH)
-  const [rooms, setRooms]           = useState(null)
-  const [rawText, setRawText]       = useState("")
+export function LocationsEditor({ pcs, activePc, setActivePc, robotPos = null, embedded = false }) {
+  // ページ移動しても保持される状態は AppContext から取得する
+  const {
+    locRooms: rooms, setLocRooms: setRooms,
+    locRawText: rawText, setLocRawText: setRawText,
+    locSourceMode, setLocSourceMode,
+    locPath, setLocPath: setPath,
+    locFileName: localFileName, setLocFileName: setLocalFileName,
+    locCollapsed: collapsed, setLocCollapsed: setCollapsed,
+  } = useAppContext()
+
+  // sourceMode は未初期化(null)なら初回に PC 有無で決定。path も未設定ならデフォルトを使う
+  const sourceMode = locSourceMode ?? (pcs.length > 0 ? 'server' : 'local')
+  const setSourceMode = setLocSourceMode
+  const path = locPath || DEFAULT_XML_PATH
+
   const [loading, setLoading]       = useState(false)
   const [saving, setSaving]         = useState(false)
   const [error, setError]           = useState(null)
   const [notice, setNotice]         = useState(null)
-  const [collapsed, setCollapsed]   = useState({})
-  const [localFileName, setLocalFileName] = useState("")
   const fileInputRef = useRef(null)
 
   const activePc_ = pcs.find(p => p.id === activePc)
@@ -118,6 +127,19 @@ export function LocationsEditor({ pcs, activePc, setActivePc, embedded = false }
     setRooms(rs => rs.map((r, i) => i !== ri ? r : {
       ...r, locations: r.locations.map((l, j) => j === li ? { ...l, ...patch } : l),
     }))
+  // 現在のロボット位置を "x y height yaw" 形式にする。height は既存値を保持する
+  const poseToPosition = (existing) => {
+    const parts = String(existing ?? "").trim().split(/\s+/)
+    const height = Number.isFinite(Number(parts[2])) ? parts[2] : "0.0"
+    return `${robotPos.x.toFixed(3)} ${robotPos.y.toFixed(3)} ${height} ${robotPos.angle.toFixed(3)}`
+  }
+  const setRoomPosNow = (ri) =>
+    setRooms(rs => rs.map((r, i) => i === ri ? { ...r, position: poseToPosition(r.position) } : r))
+  const setLocPosNow = (ri, li) =>
+    setRooms(rs => rs.map((r, i) => i !== ri ? r : {
+      ...r, locations: r.locations.map((l, j) => j === li ? { ...l, global_position: poseToPosition(l.global_position) } : l),
+    }))
+
   const addRoom = () => setRooms(rs => [...(rs ?? []), emptyRoom()])
   const removeRoom = (ri) => setRooms(rs => rs.filter((_, i) => i !== ri))
   const addLoc = (ri) =>
@@ -300,8 +322,15 @@ export function LocationsEditor({ pcs, activePc, setActivePc, embedded = false }
                     <input style={inputStyle} value={room.name} spellCheck={false}
                       onChange={e => updateRoom(ri, { name: e.target.value })} />
                     <span className="detail-label" style={{ margin: 0 }}>position</span>
-                    <input style={inputStyle} value={room.position} spellCheck={false}
-                      onChange={e => updateRoom(ri, { position: e.target.value })} />
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <input style={{ ...inputStyle, flex: 1 }} value={room.position} spellCheck={false}
+                        onChange={e => updateRoom(ri, { position: e.target.value })} />
+                      <button className="btn sm" disabled={!robotPos}
+                        title={robotPos ? "現在のロボット位置をセット" : "ロボット位置が未取得です（マップを開いて姿勢を受信してください）"}
+                        onClick={() => setRoomPosNow(ri)}>
+                        <I.pin size={11} /> 現在位置
+                      </button>
+                    </div>
                   </div>
 
                   <div style={{ overflowX: "auto" }}>
@@ -325,8 +354,15 @@ export function LocationsEditor({ pcs, activePc, setActivePc, embedded = false }
                                 onChange={e => updateLoc(ri, li, { name: e.target.value })} />
                             </td>
                             <td style={{ padding: "4px 6px" }}>
-                              <input style={inputStyle} value={loc.global_position} spellCheck={false}
-                                onChange={e => updateLoc(ri, li, { global_position: e.target.value })} />
+                              <div style={{ display: "flex", gap: 4 }}>
+                                <input style={{ ...inputStyle, flex: 1 }} value={loc.global_position} spellCheck={false}
+                                  onChange={e => updateLoc(ri, li, { global_position: e.target.value })} />
+                                <button className="icon-btn" disabled={!robotPos}
+                                  title={robotPos ? "現在のロボット位置をセット" : "ロボット位置が未取得です（マップを開いて姿勢を受信してください）"}
+                                  onClick={() => setLocPosNow(ri, li)}>
+                                  <I.pin size={13} />
+                                </button>
+                              </div>
                             </td>
                             <td style={{ padding: "4px 6px" }}>
                               <input style={inputStyle} value={loc.put_position} spellCheck={false}

@@ -48,12 +48,15 @@ function fitCameraToGrid(grid, viewer) {
 
 export function MapScreen({ pcs, activePc, setActivePc }) {
   const { ros, status } = useRos()
-  const { activePreset } = useAppContext()
+  const { activePreset, locRooms } = useAppContext()
   const containerRef    = useRef(null)
+  const labelOverlayRef = useRef(null)
   const instanceRef     = useRef(null)
   const fittedRef       = useRef(false)
   const [mapStatus, setMapStatus] = useState('waiting')
   const [mapTab, setMapTab]       = useState('map')
+  const [viewerReady, setViewerReady] = useState(false)
+  const [showLocations, setShowLocations] = useState(true)
 
   const [poseMode, setPoseMode]   = useState(false)
   const poseModeRef     = useRef(false)
@@ -300,7 +303,11 @@ export function MapScreen({ pcs, activePc, setActivePc }) {
         onPoseTouchStart, onPoseTouchMove, onPoseTouchEnd,
       }
 
-      instanceRef.current = { viewer, gridClient, ro, poseSub, triangle, previewArrow, initialPosePub }
+      instanceRef.current = {
+        viewer, gridClient, ro, poseSub, triangle, previewArrow, initialPosePub,
+        Vec3, THREEMesh, THREEGeometry, THREEFace3,
+      }
+      setViewerReady(true)
     })
 
     return () => {
@@ -327,12 +334,127 @@ export function MapScreen({ pcs, activePc, setActivePc }) {
         viewer.stop()
         instanceRef.current = null
       }
+      setViewerReady(false)
       poseDragRef.current  = null
       poseModeRef.current  = false
     }
   }, [status])
 
+  // ── ロケーション地点をマップ上にプロットする ──
+  // global_position は "x y height yaw" 形式。x, y, yaw を使って向き付きの
+  // 三角マーカーをシーンに追加し、名前は画面投影した HTML ラベルで表示する。
+  useEffect(() => {
+    if (!viewerReady) return
+    const inst = instanceRef.current
+    const overlay = labelOverlayRef.current
+    if (!inst || !overlay) return
+    if (!showLocations) return
+
+    const { viewer, Vec3, THREEMesh, THREEGeometry, THREEFace3 } = inst
+    const ROS3D = window.ROS3D
+
+    // "x y height yaw" 形式の座標をパースする。x,y が不正なら null
+    const parsePos = (str) => {
+      const p = String(str).trim().split(/\s+/).map(Number)
+      if (!Number.isFinite(p[0]) || !Number.isFinite(p[1])) return null
+      return { x: p[0], y: p[1], yaw: Number.isFinite(p[3]) ? p[3] : 0 }
+    }
+
+    // room position と location global_position を平坦化する
+    const points = []
+    ;(locRooms ?? []).forEach(room => {
+      const rp = parsePos(room.position)
+      if (rp) points.push({ name: room.name || '(無名の部屋)', ...rp, kind: 'room' })
+      ;(room.locations ?? []).forEach(loc => {
+        const lp = parsePos(loc.global_position)
+        if (lp) points.push({ name: loc.name || '(無名)', ...lp, kind: loc.isDoor ? 'door' : 'location' })
+      })
+    })
+
+    // 種別ごとの見た目（色 / マーカーサイズ / ラベル背景）
+    const STYLE = {
+      room:     { rgb: [0.18, 0.70, 0.35], triL: 0.95, triW: 0.66, z: 0.03, bg: 'rgba(20,90,45,0.88)' },
+      door:     { rgb: [0.95, 0.60, 0.10], triL: 0.60, triW: 0.42, z: 0.04, bg: 'rgba(150,90,10,0.85)' },
+      location: { rgb: [0.16, 0.44, 0.85], triL: 0.60, triW: 0.42, z: 0.04, bg: 'rgba(20,50,110,0.85)' },
+    }
+
+    const meshes = []
+    const labels = []
+
+    points.forEach(pt => {
+      const st = STYLE[pt.kind]
+      const geom = new THREEGeometry()
+      geom.vertices.push(
+        new Vec3( st.triL * 0.65,  0,            0),
+        new Vec3(-st.triL * 0.35,  st.triW / 2,  0),
+        new Vec3(-st.triL * 0.35, -st.triW / 2,  0),
+      )
+      geom.faces.push(new THREEFace3(0, 1, 2))
+      geom.computeFaceNormals()
+
+      const [r, g, b] = st.rgb
+      const mat = ROS3D.makeColorMaterial(r, g, b, 1.0)
+      if (mat.emissive) mat.emissive.setRGB(r, g, b)
+      const mesh = new THREEMesh(geom, mat)
+      mesh.position.set(pt.x, pt.y, st.z)
+      mesh.rotation.z = pt.yaw
+      viewer.scene.add(mesh)
+      meshes.push(mesh)
+
+      const el = document.createElement('div')
+      el.textContent = pt.kind === 'room' ? `[${pt.name}]` : pt.name
+      el.style.cssText =
+        'position:absolute;left:0;top:0;padding:1px 5px;white-space:nowrap;' +
+        'font-family:var(--mono);border-radius:4px;color:#fff;' +
+        'pointer-events:none;will-change:transform;' +
+        `font-size:${pt.kind === 'room' ? 12 : 11}px;` +
+        `font-weight:${pt.kind === 'room' ? 700 : 400};` +
+        `background:${st.bg};`
+      overlay.appendChild(el)
+      labels.push({ el, x: pt.x, y: pt.y, z: st.z })
+    })
+
+    // 毎フレーム world→screen 投影してラベル位置を更新する（カメラ操作に追従）
+    let raf
+    const tick = () => {
+      const cam = viewer.camera
+      const w = overlay.clientWidth, h = overlay.clientHeight
+      labels.forEach(({ el, x, y, z }) => {
+        const v = new Vec3(x, y, z ?? 0.04)
+        v.project(cam)
+        if (v.z > 1 || v.x < -1.2 || v.x > 1.2 || v.y < -1.2 || v.y > 1.2) {
+          el.style.display = 'none'
+          return
+        }
+        const sx = (v.x * 0.5 + 0.5) * w
+        const sy = (-v.y * 0.5 + 0.5) * h
+        el.style.display = ''
+        el.style.transform = `translate(-50%,-150%) translate(${sx}px,${sy}px)`
+      })
+      raf = requestAnimationFrame(tick)
+    }
+    tick()
+
+    return () => {
+      cancelAnimationFrame(raf)
+      meshes.forEach(m => viewer.scene.remove(m))
+      labels.forEach(({ el }) => el.remove())
+    }
+  }, [viewerReady, locRooms, showLocations])
+
   const mapTopic = activePreset?.map?.topic || '/map'
+
+  const robotPosReadout = robotPos && (
+    <span style={{
+      fontFamily: 'var(--mono)',
+      fontSize: 13,
+      color: paused ? 'var(--ink-3)' : 'var(--ink-1)',
+    }}>
+      <span style={{ opacity: 0.6, marginRight: 3 }}>X</span>{robotPos.x.toFixed(3)}
+      <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>Y</span>{robotPos.y.toFixed(3)}
+      <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>θ</span>{robotPos.angle.toFixed(3)} rad
+    </span>
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 14 }}>
@@ -355,25 +477,24 @@ export function MapScreen({ pcs, activePc, setActivePc }) {
           </div>
         </div>
         <div className="page-tools">
+          {mapTab === 'locations' && robotPosReadout}
           {mapTab === 'map' && (
             <>
-              {robotPos && (
-                <span style={{
-                  fontFamily: 'var(--mono)',
-                  fontSize: 13,
-                  color: paused ? 'var(--ink-3)' : 'var(--ink-1)',
-                }}>
-                  <span style={{ opacity: 0.6, marginRight: 3 }}>X</span>{robotPos.x.toFixed(3)}
-                  <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>Y</span>{robotPos.y.toFixed(3)}
-                  <span style={{ opacity: 0.6, margin: '0 3px 0 10px' }}>θ</span>{robotPos.angle.toFixed(3)} rad
-                </span>
-              )}
+              {robotPosReadout}
               <button
                 className={`btn${paused ? ' accent' : ''}`}
                 disabled={status !== 'connected'}
                 onClick={() => setPaused(p => !p)}
               >
                 {paused ? '▶ 再開' : '■ 停止'}
+              </button>
+              <button
+                className={`btn${showLocations ? ' accent' : ''}`}
+                disabled={!locRooms || locRooms.length === 0}
+                title={!locRooms || locRooms.length === 0 ? 'ロケーションタブで XML を読み込むと表示できます' : undefined}
+                onClick={() => setShowLocations(s => !s)}
+              >
+                <I.pin size={12} /> {showLocations ? '地点表示中' : '地点を表示'}
               </button>
               <button
                 className={`btn${poseMode ? ' accent' : ''}`}
@@ -423,11 +544,15 @@ export function MapScreen({ pcs, activePc, setActivePc }) {
             background: '#f5f5f5',
           }}
         />
+        <div
+          ref={labelOverlayRef}
+          style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}
+        />
       </div>
 
       {mapTab === 'locations' && (
         <div style={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
-          <LocationsEditor pcs={pcs} activePc={activePc} setActivePc={setActivePc} embedded />
+          <LocationsEditor pcs={pcs} activePc={activePc} setActivePc={setActivePc} robotPos={robotPos} embedded />
         </div>
       )}
     </div>
