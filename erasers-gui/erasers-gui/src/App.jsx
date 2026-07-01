@@ -9,6 +9,7 @@ import { MapScreen } from './screens/MapScreen'
 import { Tasks } from './screens/Tasks'
 import { Settings } from './screens/Settings'
 import { ROBOT_TYPES, ACCENTS, applyTokens } from './constants/theme'
+import { createUtterance, shouldShowUtteranceOverlay } from './utils/utteranceDisplay'
 import I from './icons.jsx'
 
 const NAV = [
@@ -272,9 +273,21 @@ function GlobalGamepad() {
 }
 
 function RosSync() {
-  const { setTelemetry, setUtterances, setOverlayUtterance, setOverlayImage, setImageViewerTopic, imageViewerTopic, setEmergencyStop, screen, activePreset } = useAppContext()
+  const { setTelemetry, setUtterances, setOverlayUtterance, setOverlayImage, setImageViewerTopic, imageViewerTopic, setEmergencyStop, screen, speechTextOnly, activePreset } = useAppContext()
   const screenRef = useRef(screen)
+  const speechTextOnlyRef = useRef(speechTextOnly)
   useEffect(() => { screenRef.current = screen }, [screen])
+  useEffect(() => { speechTextOnlyRef.current = speechTextOnly }, [speechTextOnly])
+
+  const addUtterance = useCallback((text, source = 'auto') => {
+    const utterance = createUtterance(text, new Date(), source)
+    if (!utterance) return null
+    setUtterances(prev => [utterance, ...prev].slice(0, 50))
+    if (shouldShowUtteranceOverlay(screenRef.current, speechTextOnlyRef.current)) {
+      setOverlayUtterance(utterance)
+    }
+    return utterance
+  }, [setOverlayUtterance, setUtterances])
 
   const speechTopic      = activePreset?.speech?.topic          ?? '/robot/speech'
   const speechMsgType    = activePreset?.speech?.msgType        ?? 'std_msgs/String'
@@ -338,10 +351,18 @@ function RosSync() {
 
   useEffect(() => {
     if (!speechMsg?.data) return
-    const u = { id: Date.now() + Math.random(), text: speechMsg.data, time: new Date(), source: 'auto' }
-    setUtterances(prev => [u, ...prev].slice(0, 50))
-    if (screenRef.current === 'speech') setOverlayUtterance(u)
-  }, [speechMsg])
+    addUtterance(speechMsg.data, 'auto')
+  }, [speechMsg, addUtterance])
+
+  useEffect(() => {
+    if (!import.meta.env.DEV) return
+    window.erasersSpeech = (text) => addUtterance(text, 'manual')
+    window.erasersSpeechHelp = () => 'window.erasersSpeech("表示したい発話")'
+    return () => {
+      delete window.erasersSpeech
+      delete window.erasersSpeechHelp
+    }
+  }, [addUtterance])
 
   useEffect(() => {
     if (!imageMsg) return
@@ -417,6 +438,7 @@ function AppShell() {
     telemetry, controls, setControls,
     mode, setMode, waypoints, setWaypoints,
     utterances, setUtterances, overlayUtterance, setOverlayUtterance,
+    speechTextOnly,
     overlayImage, setOverlayImage,
     emergencyStop, setEmergencyStop,
     pcs, setPcs, activePc, setActivePc,
@@ -426,6 +448,7 @@ function AppShell() {
   } = useAppContext()
 
   const [menuOpen, setMenuOpen] = useState(false)
+  const hideTopBar = screen === "speech" && speechTextOnly
 
   useEffect(() => { applyTokens(tweaks) }, [tweaks.accent, tweaks.density])
 
@@ -442,9 +465,16 @@ function AppShell() {
     <>
       <RosSync />
       <GlobalGamepad />
-      <div className="shell" data-screen={screen}>
-        <TopBar onMenu={() => setMenuOpen(true)} />
-        <main className="main" data-screen={screen}>{body}</main>
+      <div className="shell" data-screen={screen} data-hide-topbar={hideTopBar ? "true" : undefined}>
+        {!hideTopBar ? <TopBar onMenu={() => setMenuOpen(true)} /> : null}
+        <main
+          className="main"
+          data-screen={screen}
+          data-text-only={screen === "speech" && speechTextOnly ? "true" : undefined}
+          data-text-only-active={screen === "speech" && speechTextOnly && Boolean(utterances[0]?.text) ? "true" : undefined}
+        >
+          {body}
+        </main>
       </div>
       <Drawer open={menuOpen} onClose={() => setMenuOpen(false)} />
       {overlayUtterance && screen === "speech" && (

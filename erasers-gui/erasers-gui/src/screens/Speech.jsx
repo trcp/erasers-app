@@ -1,6 +1,10 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import I from '../icons.jsx'
 import { useAppContext } from '../context/AppContext'
+import {
+  getTextOnlyUtteranceState,
+  getUtteranceDisplayMode,
+} from '../utils/utteranceDisplay'
 
 const uttFontSize = (len, scale = 1) => {
   if (len <= 20) return `clamp(${32*scale}px, ${4.2*scale}vw, ${56*scale}px)`
@@ -23,13 +27,58 @@ function Section({ title, sub, tools, children, style }) {
 }
 
 export function Speech({ utterances, pcName, onReplay }) {
-  const { activePreset, imageViewerTopic } = useAppContext()
+  const { activePreset, imageViewerTopic, speechTextOnly, setSpeechTextOnly } = useAppContext()
   const speechTopic = activePreset?.speech?.topic ?? '/robot/speech'
-
   const latest = utterances[0]
+  const [now, setNow] = useState(() => new Date())
+  const textOnlyUtterance = getTextOnlyUtteranceState(latest, now)
+  const displayMode = getUtteranceDisplayMode(speechTextOnly, textOnlyUtterance.hasText)
+
+  useEffect(() => {
+    if (!speechTextOnly) return
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setSpeechTextOnly(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [speechTextOnly, setSpeechTextOnly])
+
+  useEffect(() => {
+    if (!speechTextOnly || !latest) return
+    setNow(new Date())
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [speechTextOnly, latest?.id])
+
+  if (displayMode.textOnly) {
+    return (
+      <div className={displayMode.rootClassName} onDoubleClick={() => setSpeechTextOnly(false)}>
+        {displayMode.showText ? (
+          <>
+            <img className="utt-text-only-logo" src="/speech-bg.png" alt="" aria-hidden="true" />
+            <div
+              className={`utt-full-text-wrap ${textOnlyUtterance.expired ? 'expired' : ''}`}
+            >
+              <div className="utt-full-text">
+                {textOnlyUtterance.text}
+              </div>
+              {textOnlyUtterance.expired ? (
+                <div className="utt-full-text-age">{textOnlyUtterance.ageLabel}</div>
+              ) : null}
+            </div>
+          </>
+        ) : null}
+        {displayMode.showExitButton ? (
+          <button className="utt-text-only-exit" onClick={() => setSpeechTextOnly(false)}>
+            文字だけモード終了 <span>Esc</span>
+          </button>
+        ) : null}
+      </div>
+    )
+  }
 
   return (
-    <div className="speech-screen">
+    <div className={displayMode.rootClassName}>
       <div className="utterance-modal">
         <div className="utt-head">
           <div className="utt-avatar">
@@ -44,6 +93,13 @@ export function Speech({ utterances, pcName, onReplay }) {
           <div className="utt-time mono">
             {latest ? latest.time.toLocaleTimeString("ja-JP", { hour12: false }) : "--:--:--"}
           </div>
+          <button
+            className="btn sm"
+            title="描画エリア全体に最新の発話だけを表示"
+            onClick={() => setSpeechTextOnly(true)}
+          >
+            <I.speech size={12} /> 文字だけ
+          </button>
         </div>
         <div className="utt-body">
           {latest ? (

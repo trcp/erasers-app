@@ -58,9 +58,14 @@ export function AppProvider({ children }) {
 
   const [utterances, setUtterances] = useState([])
   const [overlayUtterance, setOverlayUtterance] = useState(null)
+  const [speechTextOnly, setSpeechTextOnly] = useState(() => localStorage.getItem('erasers.speechTextOnly') === 'true')
   const [overlayImage, setOverlayImage] = useState(null)
   const [imageViewerTopic, setImageViewerTopic] = useState('')
   const [emergencyStop, setEmergencyStop] = useState(null)
+
+  useEffect(() => {
+    localStorage.setItem('erasers.speechTextOnly', speechTextOnly ? 'true' : 'false')
+  }, [speechTextOnly])
 
   useEffect(() => {
     if (!overlayUtterance) return
@@ -274,6 +279,7 @@ export function AppProvider({ children }) {
     waypoints, setWaypoints,
     utterances, setUtterances,
     overlayUtterance, setOverlayUtterance,
+    speechTextOnly, setSpeechTextOnly,
     overlayImage, setOverlayImage,
     imageViewerTopic, setImageViewerTopic,
     emergencyStop, setEmergencyStop,
